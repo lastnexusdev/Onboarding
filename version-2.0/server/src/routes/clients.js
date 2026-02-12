@@ -45,35 +45,76 @@ router.post('/', async (req, res) => {
   if (!['admin', 'sales'].includes(req.user.role)) return res.status(403).json({ error: 'Forbidden' });
   const db = await getDb();
 
-  const {
-    dateAdded, clientId, clientName, assignedTech, salesRep, email, phoneNumber, previousSoftware,
-    conversionNeeded = 'No', spanish = 'No', bankEnrollment = 'No', packageName = '', readyToCall = 0,
-    notes = '', entitledPrograms = {}
-  } = req.body;
+  try {
+    const {
+      dateAdded, clientId, clientName, assignedTech, salesRep, email, phoneNumber, previousSoftware,
+      conversionNeeded = 'No', spanish = 'No', bankEnrollment = 'No', packageName = '', readyToCall = 0,
+      notes = '', entitledPrograms = {}
+    } = req.body;
 
-  const token = crypto.randomBytes(16).toString('hex');
+    const cleanClientId = String(clientId || '').trim();
+    const cleanClientName = String(clientName || '').trim();
+    const assignedTechId = assignedTech === '' || assignedTech == null ? null : Number(assignedTech);
+    const salesRepId = salesRep === '' || salesRep == null ? null : Number(salesRep);
 
-  await db.run(
-    `INSERT INTO Onboarding (DateAdded, ClientID, ClientName, AssignedTech, SalesRep, Email, PhoneNumber, PreviousSoftware,
-      ConvertionNeeded, Spanish, BankEnrollment, Package, ReadyToCall, UploadToken)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    dateAdded || new Date().toISOString().slice(0, 10), clientId, clientName, assignedTech, salesRep, email,
-    phoneNumber, previousSoftware, conversionNeeded, spanish, bankEnrollment, packageName, readyToCall ? 1 : 0, token
-  );
+    if (!cleanClientId || !cleanClientName) {
+      return res.status(400).json({ error: 'Client ID and Client Name are required.' });
+    }
 
-  const values = PROGRAM_KEYS.map((k) => (entitledPrograms[k] ? 1 : 0));
-  await db.run(
-    `INSERT INTO EntitledPrograms (ClientID, ${PROGRAM_KEYS.join(', ')})
-     VALUES (?, ${PROGRAM_KEYS.map(() => '?').join(', ')})`,
-    clientId,
-    ...values
-  );
+    if (assignedTechId != null) {
+      const techExists = await db.get('SELECT UserID FROM Users WHERE UserID = ?', assignedTechId);
+      if (!techExists) return res.status(400).json({ error: 'Assigned tech does not exist.' });
+    }
 
-  await db.run('INSERT INTO OnboardingDetails (ClientID, Notes) VALUES (?, ?)', clientId, notes);
-  await db.run('INSERT INTO Notification (ClientID, TechID, Message) VALUES (?, ?, ?)', clientId, assignedTech, 'New client assigned to you.');
-  await db.run('INSERT INTO LastAssignedTech (UserID) VALUES (?)', assignedTech);
+    if (salesRepId != null) {
+      const salesExists = await db.get('SELECT UserID FROM Users WHERE UserID = ?', salesRepId);
+      if (!salesExists) return res.status(400).json({ error: 'Sales rep does not exist.' });
+    }
 
-  res.status(201).json({ ok: true, uploadToken: token });
+    const token = crypto.randomBytes(16).toString('hex');
+
+    await db.run(
+      `INSERT INTO Onboarding (DateAdded, ClientID, ClientName, AssignedTech, SalesRep, Email, PhoneNumber, PreviousSoftware,
+        ConvertionNeeded, Spanish, BankEnrollment, Package, ReadyToCall, UploadToken)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      dateAdded || new Date().toISOString().slice(0, 10),
+      cleanClientId,
+      cleanClientName,
+      assignedTechId,
+      salesRepId,
+      email || null,
+      phoneNumber || null,
+      previousSoftware || null,
+      conversionNeeded,
+      spanish,
+      bankEnrollment,
+      packageName,
+      readyToCall ? 1 : 0,
+      token
+    );
+
+    const values = PROGRAM_KEYS.map((k) => (entitledPrograms[k] ? 1 : 0));
+    await db.run(
+      `INSERT INTO EntitledPrograms (ClientID, ${PROGRAM_KEYS.join(', ')})
+       VALUES (?, ${PROGRAM_KEYS.map(() => '?').join(', ')})`,
+      cleanClientId,
+      ...values
+    );
+
+    await db.run('INSERT INTO OnboardingDetails (ClientID, Notes) VALUES (?, ?)', cleanClientId, notes);
+
+    if (assignedTechId != null) {
+      await db.run('INSERT INTO Notification (ClientID, TechID, Message) VALUES (?, ?, ?)', cleanClientId, assignedTechId, 'New client assigned to you.');
+      await db.run('INSERT INTO LastAssignedTech (UserID) VALUES (?)', assignedTechId);
+    }
+
+    return res.status(201).json({ ok: true, uploadToken: token });
+  } catch (error) {
+    if (error?.code === 'SQLITE_CONSTRAINT') {
+      return res.status(400).json({ error: 'Database constraint error while creating client. Check selected Tech/Sales users and unique Client ID.' });
+    }
+    return res.status(500).json({ error: 'Failed to create client.' });
+  }
 });
 
 router.get('/:clientId', async (req, res) => {

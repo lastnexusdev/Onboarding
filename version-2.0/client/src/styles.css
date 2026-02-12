@@ -104,6 +104,19 @@ button.primary:hover { background: var(--brand-dark); }
   grid-template-columns: repeat(4, minmax(180px, 1fr));
 }
 
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #4b5563;
+  text-transform: uppercase;
+}
+
 .badge {
   display: inline-block;
   padding: 4px 8px;
@@ -145,3 +158,12 @@ button.primary:hover { background: var(--brand-dark); }
 .note { color: #555; font-size: 13px; }
 .success { color: #147c3a; font-weight: 600; }
 .error { color: #b71c1c; font-weight: 600; }
+
+@media (max-width: 1200px) {
+  .form-grid { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
+}
+
+@media (max-width: 700px) {
+  .form-grid { grid-template-columns: 1fr; }
+  .actions-row { flex-wrap: wrap; }
+}

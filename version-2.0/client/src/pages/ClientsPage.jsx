@@ -79,30 +79,31 @@ export default function ClientsPage() {
         {message && <div className={message.includes('deleted') || message.includes('success') ? 'success' : 'error'}>{message}</div>}
         <form onSubmit={addClient}>
           <div className="form-grid">
-            <input placeholder="Client ID" value={form.clientId} onChange={(e) => setForm({ ...form, clientId: e.target.value })} required />
-            <input placeholder="Client Name" value={form.clientName} onChange={(e) => setForm({ ...form, clientName: e.target.value })} required />
-            <input type="date" value={form.dateAdded} onChange={(e) => setForm({ ...form, dateAdded: e.target.value })} />
-            <input placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-            <input placeholder="Phone Number" value={form.phoneNumber} onChange={(e) => setForm({ ...form, phoneNumber: e.target.value })} />
-            <input placeholder="Previous Software" value={form.previousSoftware} onChange={(e) => setForm({ ...form, previousSoftware: e.target.value })} />
-            <select value={form.assignedTech} onChange={(e) => setForm({ ...form, assignedTech: e.target.value })} required>
+            <div className="field"><label>Client ID</label><input placeholder="Client ID" value={form.clientId} onChange={(e) => setForm({ ...form, clientId: e.target.value })} required /></div>
+            <div className="field"><label>Client Name</label><input placeholder="Client Name" value={form.clientName} onChange={(e) => setForm({ ...form, clientName: e.target.value })} required /></div>
+            <div className="field"><label>Date Added</label><input type="date" value={form.dateAdded} onChange={(e) => setForm({ ...form, dateAdded: e.target.value })} /></div>
+            <div className="field"><label>Email</label><input placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
+            <div className="field"><label>Phone Number</label><input placeholder="Phone Number" value={form.phoneNumber} onChange={(e) => setForm({ ...form, phoneNumber: e.target.value })} /></div>
+            <div className="field"><label>Previous Software</label><input placeholder="Previous Software" value={form.previousSoftware} onChange={(e) => setForm({ ...form, previousSoftware: e.target.value })} /></div>
+            <div className="field"><label>Assigned Tech</label><select value={form.assignedTech} onChange={(e) => setForm({ ...form, assignedTech: e.target.value })} required>
               <option value="">Assign Tech</option>
               {techs.map((t) => <option key={t.UserID} value={t.UserID}>{t.FirstName} {t.LastName}</option>)}
-            </select>
-            <select value={form.salesRep} onChange={(e) => setForm({ ...form, salesRep: e.target.value })}>
+            </select></div>
+            <div className="field"><label>Sales Rep</label><select value={form.salesRep} onChange={(e) => setForm({ ...form, salesRep: e.target.value })}>
               <option value="">Sales Rep</option>
               {sales.map((s) => <option key={s.UserID} value={s.UserID}>{s.FirstName} {s.LastName}</option>)}
-            </select>
-            <select value={form.packageName} onChange={(e) => setForm({ ...form, packageName: e.target.value })}>
+            </select></div>
+            <div className="field"><label>Package</label><select value={form.packageName} onChange={(e) => setForm({ ...form, packageName: e.target.value })}>
               <option>Individual Package</option>
               <option>Business Package</option>
               <option>Professional Package</option>
               <option>Custom Package</option>
-            </select>
-            <select value={form.conversionNeeded} onChange={(e) => setForm({ ...form, conversionNeeded: e.target.value })}><option>No</option><option>Yes</option></select>
-            <select value={form.bankEnrollment} onChange={(e) => setForm({ ...form, bankEnrollment: e.target.value })}><option>No</option><option>Yes</option></select>
-            <select value={form.spanish} onChange={(e) => setForm({ ...form, spanish: e.target.value })}><option>No</option><option>Yes</option></select>
+            </select></div>
+            <div className="field"><label>Conversion Needed?</label><select value={form.conversionNeeded} onChange={(e) => setForm({ ...form, conversionNeeded: e.target.value })}><option>No</option><option>Yes</option></select><small className="note">If Yes, conversion checklist tasks are enabled.</small></div>
+            <div className="field"><label>Bank Enrollment?</label><select value={form.bankEnrollment} onChange={(e) => setForm({ ...form, bankEnrollment: e.target.value })}><option>No</option><option>Yes</option></select><small className="note">If Yes, bank enrollment task is included.</small></div>
+            <div className="field"><label>Spanish Preference?</label><select value={form.spanish} onChange={(e) => setForm({ ...form, spanish: e.target.value })}><option>No</option><option>Yes</option></select><small className="note">Used for assignment and communication preferences.</small></div>
           </div>
+          <label>Initial Notes</label>
           <textarea placeholder="Notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
           <button className="primary" type="submit">Add Client</button>
         </form>
