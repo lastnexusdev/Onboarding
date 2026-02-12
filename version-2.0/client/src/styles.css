@@ -83,12 +83,13 @@ th { background: #f4f6f8; text-align: left; }
 tr:hover td { background: #fafafa; }
 
 input, select, button, textarea {
-  width: 100%;
   border: 1px solid #cfd8dc;
   border-radius: 6px;
   padding: 9px;
   font: inherit;
 }
+input, select, textarea { width: 100%; }
+button { width: auto; }
 button.primary {
   background: var(--brand);
   border: none;
@@ -140,6 +141,77 @@ button.primary:hover { background: var(--brand-dark); }
 .actions-row { display: flex; gap: 8px; align-items: center; }
 .actions-row .fit { width: auto; }
 
+.full-width { width: 100%; }
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1.05fr 1fr;
+  gap: 14px;
+}
+
+.section-title {
+  color: #7a3d2f;
+  font-size: 22px;
+  margin: 4px 0 16px;
+  text-align: center;
+}
+
+.subheading {
+  color: #7a3d2f;
+  border-bottom: 1px solid #b7785b;
+  padding-bottom: 6px;
+  margin: 0 0 10px;
+  font-size: 20px;
+}
+
+.mini-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(160px, 1fr));
+}
+
+.mini-card {
+  background: #f0f2f4;
+  border-radius: 6px;
+  border: 1px solid #e0e4e7;
+  padding: 10px;
+}
+
+.mini-card label {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: #5f6670;
+  margin-bottom: 2px;
+}
+
+.mini-card span { font-weight: 700; color: #8b4a31; }
+
+.checklist-list .check-item {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid #eceff2;
+  border-radius: 0;
+  padding: 6px 2px;
+}
+
+.program-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #bfa588;
+  border-radius: 6px;
+  background: #efe8da;
+}
+
+.program-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
 .checklist-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -166,4 +238,8 @@ button.primary:hover { background: var(--brand-dark); }
 @media (max-width: 700px) {
   .form-grid { grid-template-columns: 1fr; }
   .actions-row { flex-wrap: wrap; }
+}
+
+@media (max-width: 1050px) {
+  .detail-grid { grid-template-columns: 1fr; }
 }
