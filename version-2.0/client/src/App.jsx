@@ -4,9 +4,11 @@ import { api } from './api';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import ClientsPage from './pages/ClientsPage';
+import ClientDetailPage from './pages/ClientDetailPage';
 import UsersPage from './pages/UsersPage';
 import SettingsPage from './pages/SettingsPage';
 import ReportsPage from './pages/ReportsPage';
+import HistoryPage from './pages/HistoryPage';
 
 function Private({ children }) {
   return localStorage.getItem('token') ? children : <Navigate to="/login" replace />;
@@ -19,6 +21,7 @@ export default function App() {
     if (localStorage.getItem('token')) {
       api('/auth/me').then(setMe).catch(() => {
         localStorage.removeItem('token');
+        window.location.href = '/login';
       });
     }
   }, []);
@@ -28,28 +31,38 @@ export default function App() {
     window.location.href = '/login';
   };
 
+  const authed = Boolean(localStorage.getItem('token'));
+
   return (
     <div>
-      {localStorage.getItem('token') && (
-        <nav className="nav">
-          <Link to="/dashboard">Dashboard</Link>
-          <Link to="/clients">Clients</Link>
-          <Link to="/reports">Reports</Link>
-          {(me?.role === 'admin' || me?.role === 'sales') && <Link to="/settings">Settings</Link>}
-          {me?.role === 'admin' && <Link to="/users">Users</Link>}
-          <button onClick={logout}>Logout</button>
-        </nav>
+      {authed && (
+        <header className="top-header">
+          <div className="brand">Taxware Onboarding v2</div>
+          <nav className="nav">
+            <Link to="/dashboard">Dashboard</Link>
+            <Link to="/clients">Sales / Clients</Link>
+            <Link to="/reports">Reports</Link>
+            <Link to="/history">History</Link>
+            {(me?.role === 'admin' || me?.role === 'sales') && <Link to="/settings">Settings</Link>}
+            {me?.role === 'admin' && <Link to="/users">Users</Link>}
+            <button onClick={logout}>Logout</button>
+          </nav>
+        </header>
       )}
 
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/dashboard" element={<Private><DashboardPage /></Private>} />
-        <Route path="/clients" element={<Private><ClientsPage /></Private>} />
-        <Route path="/reports" element={<Private><ReportsPage /></Private>} />
-        <Route path="/settings" element={<Private><SettingsPage /></Private>} />
-        <Route path="/users" element={<Private><UsersPage /></Private>} />
-        <Route path="*" element={<Navigate to={localStorage.getItem('token') ? '/dashboard' : '/login'} replace />} />
-      </Routes>
+      <main className="page-container">
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/dashboard" element={<Private><DashboardPage /></Private>} />
+          <Route path="/clients" element={<Private><ClientsPage /></Private>} />
+          <Route path="/clients/:clientId" element={<Private><ClientDetailPage /></Private>} />
+          <Route path="/reports" element={<Private><ReportsPage /></Private>} />
+          <Route path="/history" element={<Private><HistoryPage /></Private>} />
+          <Route path="/settings" element={<Private><SettingsPage /></Private>} />
+          <Route path="/users" element={<Private><UsersPage /></Private>} />
+          <Route path="*" element={<Navigate to={authed ? '/dashboard' : '/login'} replace />} />
+        </Routes>
+      </main>
     </div>
   );
 }

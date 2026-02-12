@@ -112,6 +112,19 @@ router.delete('/:clientId', async (req, res) => {
   res.json({ ok: true });
 });
 
+router.post('/bulk-delete', async (req, res) => {
+  if (!['admin', 'sales'].includes(req.user.role)) return res.status(403).json({ error: 'Forbidden' });
+  const { clientIds = [] } = req.body;
+  if (!Array.isArray(clientIds) || clientIds.length === 0) {
+    return res.status(400).json({ error: 'clientIds must be a non-empty array' });
+  }
+
+  const db = await getDb();
+  const placeholders = clientIds.map(() => '?').join(', ');
+  await db.run(`DELETE FROM Onboarding WHERE ClientID IN (${placeholders})`, ...clientIds);
+  res.json({ ok: true, deleted: clientIds.length });
+});
+
 router.patch('/:clientId/status', async (req, res) => {
   const { field, value } = req.body;
   if (!STATUS_FIELDS.has(field)) return res.status(400).json({ error: 'Invalid field' });
@@ -163,6 +176,20 @@ router.put('/:clientId/details', async (req, res) => {
   await db.run('INSERT INTO OnboardingHistory (ClientID, ActionType, ActionDetails, EditedBy) VALUES (?, ?, ?, ?)', req.params.clientId, 'Details Updated', 'Updated client details', req.user.username);
 
   res.json({ ok: true });
+});
+
+router.post('/:clientId/regenerate-upload-token', async (req, res) => {
+  const db = await getDb();
+  const token = crypto.randomBytes(16).toString('hex');
+  await db.run('UPDATE Onboarding SET UploadToken = ? WHERE ClientID = ?', token, req.params.clientId);
+  await db.run(
+    'INSERT INTO OnboardingHistory (ClientID, ActionType, ActionDetails, EditedBy) VALUES (?, ?, ?, ?)',
+    req.params.clientId,
+    'Upload Token Regenerated',
+    'Upload token was regenerated',
+    req.user.username
+  );
+  res.json({ ok: true, uploadToken: token });
 });
 
 router.get('/:clientId/programs', async (req, res) => {

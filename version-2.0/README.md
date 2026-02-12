@@ -19,6 +19,16 @@ Standalone rewrite of the legacy PHP onboarding app.
 - User management and report endpoints
 - File uploads and chunked uploads
 
+## Included UI modules (original-style workflows)
+- Login
+- Dashboard (stats + per-tech client tables)
+- Sales/Clients (intake, search, bulk delete)
+- Client Detail (checklist, notes/callouts, status actions, programs, history)
+- History manager (edit/delete history rows)
+- Settings (software release + package management)
+- Reports
+- Users
+
 ## Run
 ```bash
 npm install

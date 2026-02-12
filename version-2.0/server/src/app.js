@@ -10,6 +10,7 @@ import settingsRoutes from './routes/settings.js';
 import reportsRoutes from './routes/reports.js';
 import dashboardRoutes from './routes/dashboard.js';
 import uploadRoutes from './routes/uploads.js';
+import historyRoutes from './routes/history.js';
 
 const app = express();
 
@@ -24,6 +25,7 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/uploads', uploadRoutes);
+app.use('/api/history', historyRoutes);
 
 // If a built React app exists, serve it from the API server (useful for single-origin deployments).
 const currentFile = fileURLToPath(import.meta.url);
