@@ -16,17 +16,6 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '20mb' }));
 
-app.get('/', (_req, res) => {
-  res.json({
-    name: 'onboarding-v2-api',
-    ok: true,
-    docs: {
-      health: '/api/health',
-      authLogin: '/api/auth/login',
-    },
-  });
-});
-
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -45,6 +34,18 @@ if (fs.existsSync(clientDistDir)) {
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api/')) return next();
     return res.sendFile(path.join(clientDistDir, 'index.html'));
+  });
+} else {
+  app.get('/', (_req, res) => {
+    res.json({
+      name: 'onboarding-v2-api',
+      ok: true,
+      message: 'Frontend build not found. Run `npm run build -w client` from version-2.0.',
+      docs: {
+        health: '/api/health',
+        authLogin: '/api/auth/login',
+      },
+    });
   });
 }
 
