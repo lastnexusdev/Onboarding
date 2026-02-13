@@ -98,7 +98,18 @@ router.get('/:id', authenticate, (req, res) => {
     }
   }
 
-  res.json({ ...client, details: details || null, programs: programs || null, history, uploadedFiles });
+  const newRelease = db.prepare("SELECT SettingValue FROM AdminSettings WHERE SettingName = 'NewSoftwareRelease'").get();
+  const maxUpload = db.prepare("SELECT SettingValue FROM AdminSettings WHERE SettingName = 'MaxUploadSizeGB'").get();
+
+  res.json({
+    ...client,
+    details: details || null,
+    programs: programs || null,
+    history,
+    uploadedFiles,
+    newSoftwareRelease: newRelease ? newRelease.SettingValue === '1' : false,
+    maxUploadSizeGB: maxUpload ? parseInt(maxUpload.SettingValue) || 15 : 15,
+  });
 });
 
 // POST /api/clients - Add new client
@@ -107,7 +118,7 @@ router.post('/', authenticate, requireRoles('admin', 'sales'), (req, res) => {
   const {
     clientId, clientName, dateAdded, assignedTech, salesRep,
     email, phoneNumber, previousSoftware, conversionNeeded,
-    spanish, bankEnrollment, package: pkg, readyToCall, notes,
+    spanish, bankEnrollment, package: pkg, readyToCall, calledPaygo, notes,
     customPrograms,
   } = req.body;
 
@@ -166,14 +177,14 @@ router.post('/', authenticate, requireRoles('admin', 'sales'), (req, res) => {
       INSERT INTO Onboarding (
         ClientID, ClientName, DateAdded, AssignedTech, SalesRep,
         Email, PhoneNumber, PreviousSoftware, ConversionNeeded,
-        Spanish, BankEnrollment, Package, ReadyToCall, UploadToken, Progress
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+        Spanish, BankEnrollment, Package, ReadyToCall, CalledPaygo, UploadToken, Progress
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
     `).run(
       clientId, clientName, dateAdded || new Date().toISOString().split('T')[0],
       techId, salesRep || req.user.userId,
       email || '', phoneNumber || '', previousSoftware || '',
       conversionNeeded ? 1 : 0, spanish ? 1 : 0, bankEnrollment ? 1 : 0,
-      pkg || 'Individual', readyToCall ? 1 : 0, uploadToken
+      pkg || 'Individual', readyToCall ? 1 : 0, calledPaygo ? 1 : 0, uploadToken
     );
 
     db.prepare('INSERT INTO OnboardingDetails (ClientID, Notes) VALUES (?, ?)').run(clientId, notes || '');

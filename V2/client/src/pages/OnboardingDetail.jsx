@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../context/AuthContext';
@@ -89,6 +89,7 @@ export default function OnboardingDetail() {
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [unlocked, setUnlocked] = useState(false);
+  const unlockedRef = useRef(false);
 
   useEffect(() => {
     loadClient();
@@ -101,7 +102,7 @@ export default function OnboardingDetail() {
       setNotes(data.details?.Notes || '');
       setFollowUpCalls(data.details?.FollowUpCalls || '');
       setFirstCallout(data.details?.FirstCallout || '');
-      setUnlocked(false);
+      setUnlocked(unlockedRef.current);
     } catch (err) {
       setError(err.message);
     }
@@ -119,6 +120,7 @@ export default function OnboardingDetail() {
     if (window.confirm('Are you sure? This is not your client. An entry will be added to the client history noting that you unlocked this client.')) {
       try {
         await api.unlockClient(id);
+        unlockedRef.current = true;
         setUnlocked(true);
         setSuccessMsg('Client unlocked for editing.');
         setTimeout(() => setSuccessMsg(''), 3000);
@@ -228,6 +230,7 @@ export default function OnboardingDetail() {
           {client.Spanish ? <span className="badge badge-spanish">Spanish Speaker</span> : null}
           {client.ConversionNeeded ? <span className="badge badge-conversion">Conversion Needed</span> : null}
           {client.BankEnrollment ? <span className="badge badge-bank">Bank Enrollment</span> : null}
+          {client.CalledPaygo ? <span className="badge" style={{ background: '#17a2b8', color: 'white' }}>Called Paygo</span> : null}
           {unlocked && <span className="badge" style={{ background: '#dc3545', color: 'white' }}>Unlocked</span>}
         </div>
       </div>
@@ -249,28 +252,45 @@ export default function OnboardingDetail() {
           </div>
           {client.uploadedFiles && client.uploadedFiles.length > 0 && (
             <div>
-              <strong>Uploaded Files ({client.uploadedFiles.length}):</strong>
+              <strong>Uploaded Files ({client.uploadedFiles.filter(f => f.name !== 'temp').length}):</strong>
               <table className="tech-table" style={{ marginTop: 8 }}>
                 <thead>
                   <tr>
                     <th>File Name</th>
                     <th>Size</th>
                     <th>Date</th>
+                    <th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {client.uploadedFiles.map((f, i) => (
-                    <tr key={i} style={{ cursor: 'default' }}>
-                      <td>{f.name}</td>
+                  {client.uploadedFiles.filter(f => f.name !== 'temp').map((f, i) => (
+                    <tr key={i}>
+                      <td>
+                        <a
+                          href={`/api/uploads/${client.UploadToken}/download/${encodeURIComponent(f.name)}`}
+                          style={{ color: '#8B4513', textDecoration: 'underline', cursor: 'pointer' }}
+                        >
+                          {f.name}
+                        </a>
+                      </td>
                       <td>{formatFileSize(f.size)}</td>
                       <td>{new Date(f.modified).toLocaleDateString()}</td>
+                      <td>
+                        <a
+                          href={`/api/uploads/${client.UploadToken}/download/${encodeURIComponent(f.name)}`}
+                          className="btn btn-sm"
+                          style={{ fontSize: 12, padding: '2px 8px' }}
+                        >
+                          Download
+                        </a>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           )}
-          {(!client.uploadedFiles || client.uploadedFiles.length === 0) && (
+          {(!client.uploadedFiles || client.uploadedFiles.filter(f => f.name !== 'temp').length === 0) && (
             <p style={{ color: '#6c757d', margin: 0 }}>No files uploaded yet.</p>
           )}
         </div>
@@ -444,20 +464,22 @@ export default function OnboardingDetail() {
             </div>
           ) : null}
 
-          {/* Software Update */}
-          <div>
-            <h4 className="checklist-section-header">Software Update</h4>
-            <ul style={{ listStyle: 'none', padding: 0 }}>
-              <li
-                className={`checklist-item ${client.InstalledNewVersion ? 'checked' : ''}`}
-                onClick={() => handleChecklistChange('InstalledNewVersion', client.InstalledNewVersion)}
-                style={!canEdit ? { cursor: 'default', opacity: 0.7 } : undefined}
-              >
-                <input type="checkbox" checked={!!client.InstalledNewVersion} readOnly disabled={!canEdit} />
-                <span className="checklist-label">Installed New Version</span>
-              </li>
-            </ul>
-          </div>
+          {/* Software Update - only shown when there's a new release */}
+          {client.newSoftwareRelease && (
+            <div>
+              <h4 className="checklist-section-header">Software Update</h4>
+              <ul style={{ listStyle: 'none', padding: 0 }}>
+                <li
+                  className={`checklist-item ${client.InstalledNewVersion ? 'checked' : ''}`}
+                  onClick={() => handleChecklistChange('InstalledNewVersion', client.InstalledNewVersion)}
+                  style={!canEdit ? { cursor: 'default', opacity: 0.7 } : undefined}
+                >
+                  <input type="checkbox" checked={!!client.InstalledNewVersion} readOnly disabled={!canEdit} />
+                  <span className="checklist-label">Installed New Version</span>
+                </li>
+              </ul>
+            </div>
+          )}
         </div>
       </div>
 

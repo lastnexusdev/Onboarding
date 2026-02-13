@@ -42,6 +42,7 @@ export default function AddClient() {
     bankEnrollment: false,
     package: 'Individual',
     readyToCall: false,
+    calledPaygo: false,
     notes: '',
     customPrograms: [],
   });
@@ -108,7 +109,7 @@ export default function AddClient() {
         assignedTech: '', salesRep: '', email: '', phoneNumber: '',
         previousSoftware: '', conversionNeeded: false, spanish: false,
         bankEnrollment: false, package: 'Individual', readyToCall: false,
-        notes: '', customPrograms: [],
+        calledPaygo: false, notes: '', customPrograms: [],
       });
     } catch (err) {
       setError(err.message);
@@ -253,6 +254,10 @@ export default function AddClient() {
           <label className="checkbox-label">
             <input type="checkbox" name="readyToCall" checked={form.readyToCall} onChange={handleChange} />
             Ready to Call
+          </label>
+          <label className="checkbox-label">
+            <input type="checkbox" name="calledPaygo" checked={form.calledPaygo} onChange={handleChange} />
+            Called Paygo
           </label>
         </div>
 

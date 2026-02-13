@@ -195,6 +195,7 @@ async function getDb() {
       Spanish INTEGER NOT NULL DEFAULT 0,
       BankEnrollment INTEGER NOT NULL DEFAULT 0,
       ReadyToCall INTEGER NOT NULL DEFAULT 0,
+      CalledPaygo INTEGER NOT NULL DEFAULT 0,
       Progress INTEGER NOT NULL DEFAULT 0,
       UploadToken TEXT UNIQUE,
       RowColor TEXT DEFAULT NULL,
@@ -317,7 +318,12 @@ async function getDb() {
   if (settingsCount.count === 0) {
     dbInstance.prepare('INSERT INTO AdminSettings (SettingName, SettingValue) VALUES (?, ?)').run('NewSoftwareRelease', '0');
     dbInstance.prepare('INSERT INTO AdminSettings (SettingName, SettingValue) VALUES (?, ?)').run('DefaultReadyToCall', '0');
+    dbInstance.prepare('INSERT INTO AdminSettings (SettingName, SettingValue) VALUES (?, ?)').run('MaxUploadSizeGB', '15');
   }
+
+  // Migrations: add columns that may not exist in older databases
+  try { dbInstance._db.run('ALTER TABLE Onboarding ADD COLUMN CalledPaygo INTEGER NOT NULL DEFAULT 0'); } catch {}
+  try { dbInstance.prepare("INSERT OR IGNORE INTO AdminSettings (SettingName, SettingValue) VALUES ('MaxUploadSizeGB', '15')").run(); } catch {}
 
   dbInstance._saveToDisk();
   console.log('Database initialized at', dbPath);
