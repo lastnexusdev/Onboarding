@@ -3,6 +3,7 @@ session_start();
 $requireRoles = ['admin', 'sales']; // only admins and sales
 require_once "auth_check.php";
 require_once "db.php";
+require_once "csrf_helper.php";
 
 $currentPage = 'sales';
 
@@ -87,8 +88,13 @@ if ($packages_result) {
 // Success message variable
 $success_message = '';
 
+// CSRF validation for all POST requests
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && !validate_csrf_token()) {
+    $error_message = "Invalid request. Please try again.";
+}
+
 // Handle form submission for adding clients
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_client'])) {
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_client']) && empty($error_message)) {
     $date_added       = $_POST['date_added'] ?? date('Y-m-d');
     $client_id        = $_POST['client_id'] ?? '';
     $client_name      = $_POST['client_name'] ?? '';
@@ -267,7 +273,6 @@ if (isset($_GET['success']) && $_GET['success'] == 1) {
 <head>
     <meta charset="UTF-8">
     <title>Sales Dashboard</title>
-    <link rel="stylesheet" type="text/css" href="../style.css">
     <link rel="stylesheet" type="text/css" href="styles.css">
     <style>
         body {
@@ -727,6 +732,7 @@ if (isset($_GET['success']) && $_GET['success'] == 1) {
             <h3>Client Information</h3>
             
             <form method="POST" action="">
+                <?php echo csrf_token_field(); ?>
                 <!-- Basic Information Section -->
                 <div class="form-section-title">Basic Information</div>
                 <div class="form-grid">

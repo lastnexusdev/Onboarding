@@ -3,6 +3,7 @@ session_start();
 $requireRoles = ['admin', 'sales'];
 require_once "auth_check.php";
 require_once "db.php";
+require_once "csrf_helper.php";
 
 $currentPage = 'edit';
 
@@ -35,8 +36,13 @@ while ($row = $programs_result->fetch_assoc()) {
     $available_programs[$program_key] = $program_name;
 }
 
+// CSRF validation for all POST requests
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && !validate_csrf_token()) {
+    $error_message = "Invalid request. Please try again.";
+}
+
 // Handle client update
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_client'])) {
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_client']) && empty($error_message)) {
     $client_id = $_POST['client_id'] ?? '';
     $original_client_id = $_POST['original_client_id'] ?? '';
     $client_name = $_POST['client_name'] ?? '';
@@ -240,7 +246,6 @@ if ($clients_result) {
 <head>
     <meta charset="UTF-8">
     <title>Edit Clients</title>
-    <link rel="stylesheet" type="text/css" href="../style.css">
     <link rel="stylesheet" type="text/css" href="styles.css">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <style>
@@ -387,6 +392,7 @@ if ($clients_result) {
             </div>
             
             <form method="POST" action="" id="editClientForm">
+                <?php echo csrf_token_field(); ?>
                 <div class="modal-body">
                     <input type="hidden" id="original_client_id" name="original_client_id">
                     

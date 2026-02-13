@@ -1,12 +1,18 @@
 <?php
 require_once "auth_check.php";
 include 'db.php';
+require_once "csrf_helper.php";
 
 // Check if user is admin
 $is_admin = ($_SESSION['role'] == 'admin');
 
+// CSRF validation for all POST requests
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && !validate_csrf_token()) {
+    $error_message = "Invalid request. Please try again.";
+}
+
 // Handle deletion
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_history']) && $is_admin) {
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_history']) && $is_admin && !isset($error_message)) {
     $history_id = intval($_POST['history_id']);
     $delete_sql = "DELETE FROM OnboardingHistory WHERE HistoryID = ?";
     $delete_stmt = $conn->prepare($delete_sql);
@@ -20,7 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_history']) && $
 }
 
 // Handle inline editing
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_history']) && $is_admin) {
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_history']) && $is_admin && !isset($error_message)) {
     $history_id = intval($_POST['history_id']);
     $action_type = trim($_POST['action_type']);
     $action_details = trim($_POST['action_details']);
@@ -38,24 +44,24 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_history']) && $
 }
 
 // Handle custom SQL execution
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['execute_sql']) && $is_admin) {
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['execute_sql']) && $is_admin && !isset($error_message)) {
     $custom_sql = trim($_POST['custom_sql']);
-    
-    // Security check - only allow SELECT, UPDATE, DELETE for OnboardingHistory
-    if (preg_match('/^(SELECT|UPDATE|DELETE)\s+/i', $custom_sql)) {
+
+    // Security: only allow SELECT on OnboardingHistory, no stacked queries
+    $is_safe_select = preg_match('/^SELECT\s+/i', $custom_sql)
+        && preg_match('/\bOnboardingHistory\b/i', $custom_sql)
+        && !preg_match('/\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|TRUNCATE|EXEC|UNION\s+SELECT|INTO\s+OUTFILE|INTO\s+DUMPFILE|LOAD_FILE)\b/i', $custom_sql)
+        && strpos($custom_sql, ';') === false;
+
+    if ($is_safe_select) {
         try {
-            if (stripos($custom_sql, 'SELECT') === 0) {
-                $custom_result = $conn->query($custom_sql);
-                $sql_executed = true;
-            } else {
-                $conn->query($custom_sql);
-                $success_message = "SQL executed successfully! Rows affected: " . $conn->affected_rows;
-            }
+            $custom_result = $conn->query($custom_sql);
+            $sql_executed = true;
         } catch (Exception $e) {
             $error_message = "SQL Error: " . $e->getMessage();
         }
     } else {
-        $error_message = "Only SELECT, UPDATE, and DELETE queries are allowed.";
+        $error_message = "Only SELECT queries on the OnboardingHistory table are allowed. Write operations are not permitted through this interface.";
     }
 }
 
@@ -394,6 +400,7 @@ ORDER BY h.ActionTimestamp DESC;</pre>
                 <div class="sql-editor">
                     <h3>?? Custom SQL Query Editor</h3>
                     <form method="POST" action="">
+                        <?php echo csrf_token_field(); ?>
                         <input type="hidden" name="client_id" value="<?php echo htmlspecialchars($client_id); ?>">
                         <div class="form-group">
                             <label for="custom_sql">Enter Custom SQL (SELECT, UPDATE, DELETE only):</label>
@@ -443,6 +450,7 @@ ORDER BY h.ActionTimestamp DESC;</pre>
                                         <div class="actions">
                                             <button class="btn btn-warning" onclick='openEditModal(<?php echo json_encode($row); ?>)'>?? Edit</button>
                                             <form method="POST" action="" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this history record?');">
+                                                <?php echo csrf_token_field(); ?>
                                                 <input type="hidden" name="client_id" value="<?php echo htmlspecialchars($client_id); ?>">
                                                 <input type="hidden" name="history_id" value="<?php echo $row['HistoryID']; ?>">
                                                 <button type="submit" name="delete_history" class="btn btn-danger">??? Delete</button>
@@ -476,6 +484,7 @@ ORDER BY h.ActionTimestamp DESC;</pre>
                 <span class="close" onclick="closeEditModal()">&times;</span>
                 <h3 style="color: #007BFF; margin-top: 0;">Edit History Record</h3>
                 <form method="POST" action="">
+                    <?php echo csrf_token_field(); ?>
                     <input type="hidden" name="client_id" value="<?php echo htmlspecialchars($client_id); ?>">
                     <input type="hidden" id="edit_history_id" name="history_id">
                     

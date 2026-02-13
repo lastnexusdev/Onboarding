@@ -1,9 +1,10 @@
 <?php
 include 'db.php';
 
-// Enable error reporting for debugging
+// Enable error reporting (log only, never display)
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
 
 // Set unlimited execution time for large uploads
 set_time_limit(0);
@@ -34,7 +35,7 @@ $client_id = htmlspecialchars($client['ClientID']);
 // Create data directory if it doesn't exist
 $base_dir = __DIR__ . '/data';
 if (!file_exists($base_dir)) {
-    if (!mkdir($base_dir, 0777, true)) {
+    if (!mkdir($base_dir, 0755, true)) {
         die("Failed to create base data directory. Please contact support.");
     }
 }
@@ -51,12 +52,12 @@ if (isset($_POST['chunk_upload'])) {
     $file_name = preg_replace("/[^a-zA-Z0-9._-]/", "_", $_POST['file_name']);
 
     if (!file_exists($upload_dir)) {
-        mkdir($upload_dir, 0777, true);
+        mkdir($upload_dir, 0755, true);
     }
 
     $temp_dir = $upload_dir . '/temp';
     if (!file_exists($temp_dir)) {
-        mkdir($temp_dir, 0777, true);
+        mkdir($temp_dir, 0755, true);
     }
 
     $chunk_file = $temp_dir . '/' . $file_name . '.part' . $chunk_number;
@@ -116,7 +117,7 @@ $error_message = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['file'])) {
     if (!file_exists($upload_dir)) {
-        mkdir($upload_dir, 0777, true);
+        mkdir($upload_dir, 0755, true);
     }
 
     if ($_FILES['file']['error'] === UPLOAD_ERR_OK) {

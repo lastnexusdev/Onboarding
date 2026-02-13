@@ -2,6 +2,7 @@
 session_start();
 require_once "auth_check.php";
 require_once "db.php";
+require_once "csrf_helper.php";
 
 $currentPage = 'users';
 
@@ -15,8 +16,13 @@ if (!isset($_SESSION['userid']) || !isset($_SESSION['role']) || $_SESSION['role'
 $message = '';
 $error = '';
 
+// CSRF validation for all POST requests
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && !validate_csrf_token()) {
+    $error = "Invalid request. Please try again.";
+}
+
 // Add new user
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_user'])) {
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_user']) && empty($error)) {
     $username = trim($_POST['username']);
     $password = password_hash($_POST['password'], PASSWORD_DEFAULT);
     $first_name = trim($_POST['first_name']);
@@ -52,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_user'])) {
 }
 
 // Update user
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_user'])) {
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_user']) && empty($error)) {
     $user_id = intval($_POST['user_id']);
     $username = trim($_POST['edit_username']);
     $first_name = trim($_POST['edit_first_name']);
@@ -83,7 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_user'])) {
 }
 
 // Delete user
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_user'])) {
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_user']) && empty($error)) {
     $user_id = intval($_POST['delete_user_id']);
     
     // Prevent deleting yourself
@@ -129,7 +135,6 @@ $users_result = $conn->query($users_sql);
 <head>
     <meta charset="UTF-8">
     <title>User Management</title>
-    <link rel="stylesheet" type="text/css" href="../style.css">
     <link rel="stylesheet" type="text/css" href="styles.css">
     <style>
         .user-management-container {
@@ -493,6 +498,7 @@ $users_result = $conn->query($users_sql);
         <div class="add-user-section">
             <h3>Add New User</h3>
             <form method="POST" action="" onsubmit="return validateAddForm()">
+                <?php echo csrf_token_field(); ?>
                 <div class="form-grid">
                     <div class="form-group">
                         <label for="username">Username *</label>
@@ -598,6 +604,7 @@ $users_result = $conn->query($users_sql);
                                     <button class="btn btn-edit" onclick='openEditModal(<?php echo json_encode($user); ?>)'>Edit</button>
                                     <?php if ($user['UserID'] != $_SESSION['userid']): ?>
                                         <form method="POST" action="" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this user?<?php echo $user['assigned_clients'] > 0 ? ' This user has ' . $user['assigned_clients'] . ' assigned clients.' : ''; ?>');">
+                                            <?php echo csrf_token_field(); ?>
                                             <input type="hidden" name="delete_user_id" value="<?php echo $user['UserID']; ?>">
                                             <button type="submit" name="delete_user" class="btn btn-delete">Delete</button>
                                         </form>
@@ -617,6 +624,7 @@ $users_result = $conn->query($users_sql);
             <span class="close" onclick="closeEditModal()">&times;</span>
             <h3>Edit User</h3>
             <form method="POST" action="" onsubmit="return validateEditForm()">
+                <?php echo csrf_token_field(); ?>
                 <input type="hidden" id="edit_user_id" name="user_id">
                 
                 <div class="form-grid">
