@@ -1,145 +1,212 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../context/AuthContext';
 
-function getStatusLabel(client) {
-  if (client.Cancelled) return { text: 'Cancelled', cls: 'status-cancelled' };
-  if (client.Stalled) return { text: 'Stalled', cls: 'status-stalled' };
-  if (client.Completed) return { text: 'Completed', cls: 'status-completed' };
-  if (client.CompletedUntilNewVersion) return { text: 'Pending New Version', cls: 'status-pending' };
-  if (client.Progress > 0) return { text: 'In Progress', cls: 'status-inprogress' };
-  return { text: 'Not Started', cls: 'status-notstarted' };
+function getRowColor(client) {
+  if (client.Cancelled) return '#D3D3D3';
+  if (client.Completed) return '#d4edda';
+  if (client.CompletedUntilNewVersion) return '#cfe2ff';
+  if (client.Stalled) return '#FFB5B3';
+  if (client.Progress > 0) return '#fff3cd';
+  return '';
 }
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const [data, setData] = useState(null);
+  const navigate = useNavigate();
+  const [stats, setStats] = useState(null);
+  const [clients, setClients] = useState([]);
+  const [techRoster, setTechRoster] = useState([]);
+  const [newSoftwareRelease, setNewSoftwareRelease] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    api.getDashboard().then(setData).catch(err => setError(err.message));
+    Promise.all([api.getDashboard(), api.getClients()])
+      .then(([dashData, clientsData]) => {
+        setStats(dashData.stats);
+        setTechRoster(dashData.techRoster || []);
+        setNewSoftwareRelease(dashData.newSoftwareRelease);
+        setClients(clientsData);
+      })
+      .catch(err => setError(err.message));
   }, []);
 
   if (error) return <div className="alert alert-error">{error}</div>;
-  if (!data) return <div className="loading">Loading dashboard...</div>;
+  if (!stats) return <div className="loading">Loading dashboard...</div>;
 
-  const { stats, clients, techRoster, newSoftwareRelease } = data;
+  // Group clients by assigned tech
+  const clientsByTech = {};
+  clients.forEach(c => {
+    const techId = c.AssignedTech || 'unassigned';
+    if (!clientsByTech[techId]) clientsByTech[techId] = [];
+    clientsByTech[techId].push(c);
+  });
+
+  // Build tech sections from techRoster
+  const techSections = techRoster.map(tech => {
+    const techClients = clientsByTech[tech.UserID] || [];
+    const completedCount = techClients.filter(c => c.Progress === 100).length;
+    const activeCount = techClients.filter(c => c.Progress > 0 && c.Progress < 100).length;
+    return {
+      id: tech.UserID,
+      name: `${tech.FirstName} ${tech.LastName}`,
+      totalCount: techClients.length,
+      completedCount,
+      activeCount,
+      clients: techClients,
+    };
+  });
+
+  // For tech users, show a single section with their clients
+  const isTech = user.role === 'tech';
+  const sectionsToRender = isTech
+    ? [{ id: user.userId, name: `${user.firstName} ${user.lastName}`, totalCount: clients.length, completedCount: clients.filter(c => c.Progress === 100).length, activeCount: clients.filter(c => c.Progress > 0 && c.Progress < 100).length, clients }]
+    : techSections;
+
+  const totalPercent = (val) => stats.totalClients > 0 ? ((val / stats.totalClients) * 100).toFixed(1) + '% of total' : '0%';
 
   return (
     <div className="page-dashboard">
-      <h1>Dashboard</h1>
+      <h2>Tech Dashboard</h2>
+
       {newSoftwareRelease && (
         <div className="alert alert-info">New software version has been released. Clients may need to install the update.</div>
       )}
 
-      <div className="stats-grid">
-        <div className="stat-card">
-          <div className="stat-value">{stats.totalClients}</div>
-          <div className="stat-label">Total Clients</div>
+      {/* Stats Overview */}
+      <div className="stats-overview">
+        <div className="stat-card total">
+          <div className="stat-label-text">Total Clients</div>
+          <div className="number">{stats.totalClients}</div>
+          <div className="percentage">All active clients</div>
         </div>
-        <div className="stat-card stat-completed">
-          <div className="stat-value">{stats.completed}</div>
-          <div className="stat-label">Completed</div>
+        <div className="stat-card completed">
+          <div className="stat-label-text">Completed</div>
+          <div className="number">{stats.completed}</div>
+          <div className="percentage">{totalPercent(stats.completed)}</div>
         </div>
-        <div className="stat-card stat-inprogress">
-          <div className="stat-value">{stats.inProgress}</div>
-          <div className="stat-label">In Progress</div>
+        <div className="stat-card in-progress">
+          <div className="stat-label-text">In Progress</div>
+          <div className="number">{stats.inProgress}</div>
+          <div className="percentage">{totalPercent(stats.inProgress)}</div>
         </div>
-        <div className="stat-card stat-notstarted">
-          <div className="stat-value">{stats.notStarted}</div>
-          <div className="stat-label">Not Started</div>
+        <div className="stat-card not-started">
+          <div className="stat-label-text">Not Started</div>
+          <div className="number">{stats.notStarted}</div>
+          <div className="percentage">{totalPercent(stats.notStarted)}</div>
         </div>
-        <div className="stat-card stat-stalled">
-          <div className="stat-value">{stats.stalled}</div>
-          <div className="stat-label">Stalled</div>
+        <div className="stat-card stalled">
+          <div className="stat-label-text">Stalled</div>
+          <div className="number">{stats.stalled}</div>
+          <div className="percentage">Needs attention</div>
         </div>
-        <div className="stat-card stat-cancelled">
-          <div className="stat-value">{stats.cancelled}</div>
-          <div className="stat-label">Cancelled</div>
+        <div className="stat-card cancelled">
+          <div className="stat-label-text">Cancelled</div>
+          <div className="number">{stats.cancelled}</div>
+          <div className="percentage">Inactive</div>
         </div>
-        <div className="stat-card">
-          <div className="stat-value">{stats.avgProgress}%</div>
-          <div className="stat-label">Avg Progress</div>
-        </div>
-        {stats.pendingNewVersion > 0 && (
-          <div className="stat-card stat-pending">
-            <div className="stat-value">{stats.pendingNewVersion}</div>
-            <div className="stat-label">Pending New Version</div>
+      </div>
+
+      {/* Status Legend */}
+      <div className="legend">
+        <h4>Status Legend:</h4>
+        <div className="legend-items">
+          <div className="legend-item">
+            <div className="legend-color" style={{ backgroundColor: '#D3D3D3' }}></div>
+            <span className="legend-label">Cancelled</span>
           </div>
-        )}
+          <div className="legend-item">
+            <div className="legend-color" style={{ backgroundColor: '#d4edda' }}></div>
+            <span className="legend-label">Completed</span>
+          </div>
+          <div className="legend-item">
+            <div className="legend-color" style={{ backgroundColor: '#cfe2ff' }}></div>
+            <span className="legend-label">Completed Until New Version</span>
+          </div>
+          <div className="legend-item">
+            <div className="legend-color" style={{ backgroundColor: '#fff3cd' }}></div>
+            <span className="legend-label">In Progress</span>
+          </div>
+          <div className="legend-item">
+            <div className="legend-color" style={{ backgroundColor: '#FFB5B3' }}></div>
+            <span className="legend-label">Stalled</span>
+          </div>
+        </div>
       </div>
 
-      <h2>Clients</h2>
-      <div className="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th>Client ID</th>
-              <th>Client Name</th>
-              <th>Tech</th>
-              <th>Phone</th>
-              <th>Progress</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {clients.map(c => {
-              const status = getStatusLabel(c);
-              return (
-                <tr key={c.ClientID} style={c.RowColor ? { backgroundColor: c.RowColor } : undefined}>
-                  <td>{c.ClientID}</td>
-                  <td>{c.ClientName}</td>
-                  <td>{c.TechName || 'Unassigned'}</td>
-                  <td>{c.PhoneNumber}</td>
-                  <td>
-                    <div className="progress-bar">
-                      <div className="progress-fill" style={{ width: `${c.Progress}%` }}></div>
-                      <span>{c.Progress}%</span>
-                    </div>
-                  </td>
-                  <td><span className={`status-badge ${status.cls}`}>{status.text}</span></td>
-                  <td>
-                    <Link to={`/onboarding/${encodeURIComponent(c.ClientID)}`} className="btn btn-sm">View</Link>
-                  </td>
-                </tr>
-              );
-            })}
-            {clients.length === 0 && (
-              <tr><td colSpan="7" className="text-center">No clients found</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {user.role !== 'tech' && techRoster.length > 0 && (
-        <>
-          <h2>Tech Roster</h2>
-          <div className="table-container">
-            <table>
+      {/* Tech Sections */}
+      <div className="tech-container">
+        {sectionsToRender.map(section => (
+          <div key={section.id} className="tech-box">
+            <div className="tech-header">
+              <h3>{section.name}</h3>
+              <div className="tech-stats">
+                <span className="tech-stat">{section.totalCount} Total</span>
+                <span className="tech-stat">{section.completedCount} Complete</span>
+                <span className="tech-stat">{section.activeCount} Active</span>
+              </div>
+            </div>
+            <table className="tech-table">
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Spanish</th>
-                  <th>Assigned</th>
+                  <th>Client ID</th>
+                  <th>Client Name</th>
+                  <th>Phone</th>
+                  <th>Progress</th>
                   <th>Completed</th>
+                  <th>Conversion</th>
+                  <th>Sales Rep</th>
+                  <th>Package</th>
                 </tr>
               </thead>
               <tbody>
-                {techRoster.map(t => (
-                  <tr key={t.UserID}>
-                    <td>{t.FirstName} {t.LastName}</td>
-                    <td>{t.Spanish ? 'Yes' : 'No'}</td>
-                    <td>{t.clientCount}</td>
-                    <td>{t.completedCount}</td>
+                {section.clients.length > 0 ? (
+                  section.clients.map(c => {
+                    const rowColor = getRowColor(c);
+                    return (
+                      <tr
+                        key={c.ClientID}
+                        style={rowColor ? { backgroundColor: rowColor } : undefined}
+                        onClick={() => navigate(`/onboarding/${encodeURIComponent(c.ClientID)}`)}
+                      >
+                        <td><strong>{c.ClientID}</strong></td>
+                        <td>{c.ClientName}</td>
+                        <td>{c.PhoneNumber}</td>
+                        <td>
+                          <div className="progress-cell">
+                            <div className="mini-progress-bar">
+                              <div className="mini-progress-fill" style={{ width: `${c.Progress}%` }}></div>
+                            </div>
+                            <span className="progress-text">{c.Progress}%</span>
+                          </div>
+                        </td>
+                        <td>
+                          <span className={`status-badge ${c.Completed ? 'status-yes' : 'status-no'}`}>
+                            {c.Completed ? 'Yes' : 'No'}
+                          </span>
+                        </td>
+                        <td>{c.ConversionNeeded ? 'Yes' : 'No'}</td>
+                        <td>{c.SalesRepName || 'N/A'}</td>
+                        <td>{c.Package}</td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan="8">
+                      <div className="no-clients">
+                        <h4>No Clients Assigned</h4>
+                        <p>This technician has no active clients.</p>
+                      </div>
+                    </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
-        </>
-      )}
+        ))}
+      </div>
     </div>
   );
 }
