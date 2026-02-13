@@ -3,16 +3,9 @@ const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
 
-// GET /api/dashboard - Get dashboard statistics
+// GET /api/dashboard - Get dashboard statistics (all roles see all clients)
 router.get('/', authenticate, (req, res) => {
   const db = req.db;
-  let whereClause = '';
-  let params = [];
-
-  if (req.user.role === 'tech') {
-    whereClause = 'WHERE o.AssignedTech = ?';
-    params = [req.user.userId];
-  }
 
   const stats = db.prepare(`
     SELECT
@@ -25,8 +18,7 @@ router.get('/', authenticate, (req, res) => {
       SUM(CASE WHEN o.CompletedUntilNewVersion = 1 THEN 1 ELSE 0 END) as pendingNewVersion,
       ROUND(AVG(o.Progress), 1) as avgProgress
     FROM Onboarding o
-    ${whereClause}
-  `).get(...params);
+  `).get();
 
   const clients = db.prepare(`
     SELECT o.ClientID, o.ClientName, o.Progress, o.Completed, o.Stalled, o.Cancelled,
@@ -35,9 +27,8 @@ router.get('/', authenticate, (req, res) => {
            u.FirstName || ' ' || u.LastName AS TechName
     FROM Onboarding o
     LEFT JOIN Users u ON o.AssignedTech = u.UserID
-    ${whereClause}
     ORDER BY o.DateAdded DESC
-  `).all(...params);
+  `).all();
 
   const techRoster = db.prepare(`
     SELECT u.UserID, u.FirstName, u.LastName, u.Spanish,

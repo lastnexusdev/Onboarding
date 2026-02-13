@@ -58,11 +58,8 @@ export default function Dashboard() {
     };
   });
 
-  // For tech users, show a single section with their clients
-  const isTech = user.role === 'tech';
-  const sectionsToRender = isTech
-    ? [{ id: user.userId, name: `${user.firstName} ${user.lastName}`, totalCount: clients.length, completedCount: clients.filter(c => c.Progress === 100).length, activeCount: clients.filter(c => c.Progress > 0 && c.Progress < 100).length, clients }]
-    : techSections;
+  // All roles see the same tech-grouped view
+  const sectionsToRender = techSections;
 
   const totalPercent = (val) => stats.totalClients > 0 ? ((val / stats.totalClients) * 100).toFixed(1) + '% of total' : '0%';
 

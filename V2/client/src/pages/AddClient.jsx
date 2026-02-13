@@ -23,7 +23,9 @@ export default function AddClient() {
   const navigate = useNavigate();
   const [techs, setTechs] = useState([]);
   const [users, setUsers] = useState([]);
+  const [customPackages, setCustomPackages] = useState([]);
   const [success, setSuccess] = useState('');
+  const [uploadToken, setUploadToken] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
@@ -47,10 +49,19 @@ export default function AddClient() {
   useEffect(() => {
     api.getTechs().then(setTechs).catch(() => {});
     api.getUsers().then(setUsers).catch(() => {});
+    api.getPackages().then(setCustomPackages).catch(() => {});
   }, []);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
+    if (name === 'package') {
+      // When selecting a saved custom package, pre-populate the programs
+      const pkg = customPackages.find(p => p.PackageName === value);
+      if (pkg) {
+        setForm(prev => ({ ...prev, package: value, customPrograms: pkg.Programs || [] }));
+        return;
+      }
+    }
     setForm(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
   };
 
@@ -63,10 +74,26 @@ export default function AddClient() {
     }));
   };
 
+  const handleCopyLink = () => {
+    const link = `${window.location.origin}/upload/${uploadToken}`;
+    navigator.clipboard.writeText(link).then(() => {
+      const btn = document.getElementById('copy-link-btn');
+      if (btn) {
+        btn.textContent = 'Copied!';
+        btn.style.background = '#28a745';
+        setTimeout(() => {
+          btn.textContent = 'Copy Upload Link';
+          btn.style.background = '';
+        }, 2000);
+      }
+    });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setSuccess('');
+    setUploadToken('');
     setLoading(true);
     try {
       const result = await api.createClient({
@@ -74,7 +101,8 @@ export default function AddClient() {
         assignedTech: form.assignedTech ? parseInt(form.assignedTech) : null,
         salesRep: form.salesRep ? parseInt(form.salesRep) : user.userId,
       });
-      setSuccess(`Client "${form.clientName}" added successfully! Upload token: ${result.uploadToken}`);
+      setSuccess(`Client "${form.clientName}" added successfully!`);
+      setUploadToken(result.uploadToken);
       setForm({
         clientId: '', clientName: '', dateAdded: new Date().toISOString().split('T')[0],
         assignedTech: '', salesRep: '', email: '', phoneNumber: '',
@@ -89,11 +117,29 @@ export default function AddClient() {
     }
   };
 
+  const isStandardPackage = ['Individual', 'Business', 'Professional'].includes(form.package);
+  const showProgramCheckboxes = form.package === 'Custom' || (!isStandardPackage && form.package !== 'Individual');
+
   return (
     <div className="page-add-client">
       <h1>Add New Client</h1>
 
-      {success && <div className="alert alert-success">{success}</div>}
+      {success && (
+        <div className="alert alert-success">
+          <div>{success}</div>
+          {uploadToken && (
+            <div style={{ marginTop: 10, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <strong>Upload Link:</strong>
+              <code style={{ background: '#e9ecef', padding: '4px 8px', borderRadius: 4, fontSize: 13 }}>
+                {`${window.location.origin}/upload/${uploadToken}`}
+              </code>
+              <button id="copy-link-btn" className="btn btn-sm" onClick={handleCopyLink} type="button">
+                Copy Upload Link
+              </button>
+            </div>
+          )}
+        </div>
+      )}
       {error && <div className="alert alert-error">{error}</div>}
 
       <form onSubmit={handleSubmit} className="form-card">
@@ -154,15 +200,26 @@ export default function AddClient() {
           <div className="form-group">
             <label>Package</label>
             <select name="package" value={form.package} onChange={handleChange}>
-              <option value="Individual">Individual</option>
-              <option value="Business">Business</option>
-              <option value="Professional">Professional</option>
-              <option value="Custom">Custom</option>
+              <optgroup label="Standard Packages">
+                <option value="Individual">Individual</option>
+                <option value="Business">Business</option>
+                <option value="Professional">Professional</option>
+              </optgroup>
+              {customPackages.length > 0 && (
+                <optgroup label="Custom Packages">
+                  {customPackages.map(p => (
+                    <option key={p.PackageID} value={p.PackageName}>{p.PackageName}</option>
+                  ))}
+                </optgroup>
+              )}
+              <optgroup label="Other">
+                <option value="Custom">Custom (One-time Selection)</option>
+              </optgroup>
             </select>
           </div>
         </div>
 
-        {form.package === 'Custom' && (
+        {showProgramCheckboxes && (
           <div className="form-group">
             <label>Select Programs</label>
             <div className="checkbox-grid">

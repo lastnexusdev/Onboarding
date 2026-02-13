@@ -72,6 +72,12 @@ const PROGRAM_LABELS = {
   prog_1099Acc: '1099Acc',
 };
 
+function formatFileSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
 export default function OnboardingDetail() {
   const { id } = useParams();
   const { user } = useAuth();
@@ -79,8 +85,10 @@ export default function OnboardingDetail() {
   const [error, setError] = useState('');
   const [notes, setNotes] = useState('');
   const [followUpCalls, setFollowUpCalls] = useState('');
+  const [firstCallout, setFirstCallout] = useState('');
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
+  const [unlocked, setUnlocked] = useState(false);
 
   useEffect(() => {
     loadClient();
@@ -92,12 +100,37 @@ export default function OnboardingDetail() {
       setClient(data);
       setNotes(data.details?.Notes || '');
       setFollowUpCalls(data.details?.FollowUpCalls || '');
+      setFirstCallout(data.details?.FirstCallout || '');
+      setUnlocked(false);
     } catch (err) {
       setError(err.message);
     }
   };
 
+  const isOwner = client && (
+    user.role === 'admin' ||
+    client.AssignedTech === user.userId ||
+    client.SalesRep === user.userId
+  );
+
+  const canEdit = isOwner || unlocked;
+
+  const handleUnlock = async () => {
+    if (window.confirm('Are you sure? This is not your client. An entry will be added to the client history noting that you unlocked this client.')) {
+      try {
+        await api.unlockClient(id);
+        setUnlocked(true);
+        setSuccessMsg('Client unlocked for editing.');
+        setTimeout(() => setSuccessMsg(''), 3000);
+        loadClient();
+      } catch (err) {
+        setError(err.message);
+      }
+    }
+  };
+
   const handleChecklistChange = async (field, currentValue) => {
+    if (!canEdit) return;
     try {
       const result = await api.updateChecklist(id, field, !currentValue);
       setClient(prev => ({
@@ -112,12 +145,14 @@ export default function OnboardingDetail() {
     }
   };
 
-  const handleSaveNotes = async () => {
+  const handleSaveFirstCallout = async () => {
+    if (!firstCallout) return;
     setSaving(true);
     try {
-      await api.updateClientDetails(id, { notes });
-      setSuccessMsg('Notes saved successfully!');
+      await api.updateClientDetails(id, { firstCallout });
+      setSuccessMsg('First Callout saved!');
       setTimeout(() => setSuccessMsg(''), 3000);
+      loadClient();
     } catch (err) {
       setError(err.message);
     }
@@ -128,12 +163,42 @@ export default function OnboardingDetail() {
     setSaving(true);
     try {
       await api.updateClientDetails(id, { followUpCalls });
-      setSuccessMsg('Follow Up Calls saved successfully!');
+      setSuccessMsg('Follow Up Calls saved!');
       setTimeout(() => setSuccessMsg(''), 3000);
+      loadClient();
     } catch (err) {
       setError(err.message);
     }
     setSaving(false);
+  };
+
+  const handleSaveNotes = async () => {
+    setSaving(true);
+    try {
+      await api.updateClientDetails(id, { notes });
+      setSuccessMsg('Notes saved!');
+      setTimeout(() => setSuccessMsg(''), 3000);
+      loadClient();
+    } catch (err) {
+      setError(err.message);
+    }
+    setSaving(false);
+  };
+
+  const handleCopyUploadLink = () => {
+    if (!client?.UploadToken) return;
+    const link = `${window.location.origin}/upload/${client.UploadToken}`;
+    navigator.clipboard.writeText(link).then(() => {
+      const btn = document.getElementById('copy-upload-link-btn');
+      if (btn) {
+        btn.textContent = 'Copied!';
+        btn.style.background = '#28a745';
+        setTimeout(() => {
+          btn.textContent = 'Copy Upload Link';
+          btn.style.background = '';
+        }, 2000);
+      }
+    });
   };
 
   if (error) return <div className="alert alert-error">{error}</div>;
@@ -149,24 +214,74 @@ export default function OnboardingDetail() {
     <div className="page-onboarding-detail">
       {/* Page Header */}
       <div className="progress-section" style={{ marginBottom: 20 }}>
-        <h2 style={{ marginBottom: 10, color: '#8B4513', borderBottom: '2px solid #8B4513', paddingBottom: 10 }}>
-          Onboarding Details for {client.ClientName}
-        </h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+          <h2 style={{ marginBottom: 10, color: '#8B4513', borderBottom: '2px solid #8B4513', paddingBottom: 10, flex: 1 }}>
+            Onboarding Details for {client.ClientName}
+          </h2>
+          {!isOwner && !unlocked && (
+            <button className="btn btn-danger" onClick={handleUnlock}>
+              Unlock for Editing
+            </button>
+          )}
+        </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {client.Spanish ? <span className="badge badge-spanish">Spanish Speaker</span> : null}
           {client.ConversionNeeded ? <span className="badge badge-conversion">Conversion Needed</span> : null}
           {client.BankEnrollment ? <span className="badge badge-bank">Bank Enrollment</span> : null}
+          {unlocked && <span className="badge" style={{ background: '#dc3545', color: 'white' }}>Unlocked</span>}
         </div>
       </div>
 
       {successMsg && <div className="alert alert-success">{successMsg}</div>}
+
+      {/* Upload Link & Files */}
+      {client.UploadToken && (
+        <div className="progress-section" style={{ marginBottom: 20 }}>
+          <h3 style={{ marginTop: 0, color: '#8B4513' }}>File Upload</h3>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
+            <strong>Upload Link:</strong>
+            <code style={{ background: '#e9ecef', padding: '4px 8px', borderRadius: 4, fontSize: 13, wordBreak: 'break-all' }}>
+              {`${window.location.origin}/upload/${client.UploadToken}`}
+            </code>
+            <button id="copy-upload-link-btn" className="btn btn-sm" onClick={handleCopyUploadLink} type="button">
+              Copy Upload Link
+            </button>
+          </div>
+          {client.uploadedFiles && client.uploadedFiles.length > 0 && (
+            <div>
+              <strong>Uploaded Files ({client.uploadedFiles.length}):</strong>
+              <table className="tech-table" style={{ marginTop: 8 }}>
+                <thead>
+                  <tr>
+                    <th>File Name</th>
+                    <th>Size</th>
+                    <th>Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {client.uploadedFiles.map((f, i) => (
+                    <tr key={i} style={{ cursor: 'default' }}>
+                      <td>{f.name}</td>
+                      <td>{formatFileSize(f.size)}</td>
+                      <td>{new Date(f.modified).toLocaleDateString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {(!client.uploadedFiles || client.uploadedFiles.length === 0) && (
+            <p style={{ color: '#6c757d', margin: 0 }}>No files uploaded yet.</p>
+          )}
+        </div>
+      )}
 
       {/* Progress Overview */}
       <div className="progress-section">
         <h3 style={{ marginTop: 0, color: '#8B4513' }}>Progress Overview</h3>
         <div className="progress-bar-large">
           <div className="progress-bar-inner" style={{ width: `${progressPercent}%` }}>
-            {progressPercent.toFixed(1)}%
+            {progressPercent > 10 ? `${progressPercent.toFixed(1)}%` : ''}
           </div>
         </div>
         <p className="progress-percentage">Progress: {progressPercent.toFixed(1)}%</p>
@@ -207,24 +322,8 @@ export default function OnboardingDetail() {
               <span className="value">{client.PreviousSoftware || 'N/A'}</span>
             </div>
             <div className="info-item">
-              <strong>Conversion Needed</strong>
-              <span className="value">{client.ConversionNeeded ? 'Yes' : 'No'}</span>
-            </div>
-            <div className="info-item">
-              <strong>Bank Enrollment</strong>
-              <span className="value">{client.BankEnrollment ? 'Yes' : 'No'}</span>
-            </div>
-            <div className="info-item">
               <strong>Package</strong>
               <span className="value">{client.Package}</span>
-            </div>
-            <div className="info-item">
-              <strong>Ready To Call</strong>
-              <span className="value">{client.ReadyToCall ? 'Yes' : 'No'}</span>
-            </div>
-            <div className="info-item">
-              <strong>Spanish Speaker</strong>
-              <span className="value">{client.Spanish ? 'Yes' : 'No'}</span>
             </div>
           </div>
 
@@ -245,12 +344,22 @@ export default function OnboardingDetail() {
             <h3>Additional Information</h3>
             <div className="form-group">
               <label>First Callout</label>
-              <input
-                type="date"
-                value={client.details?.FirstCallout || ''}
-                disabled={!!client.details?.FirstCallout}
-                readOnly
-              />
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input
+                  type="date"
+                  value={firstCallout}
+                  onChange={(e) => setFirstCallout(e.target.value)}
+                  disabled={!canEdit || !!client.details?.FirstCallout}
+                />
+                {canEdit && !client.details?.FirstCallout && (
+                  <button onClick={handleSaveFirstCallout} className="btn btn-sm" disabled={saving || !firstCallout}>
+                    {saving ? 'Saving...' : 'Save'}
+                  </button>
+                )}
+                {client.details?.FirstCallout && (
+                  <span style={{ color: '#28a745', fontWeight: 600, fontSize: 13 }}>Completed</span>
+                )}
+              </div>
             </div>
             <div className="form-group">
               <label>Follow Up Calls</label>
@@ -258,10 +367,13 @@ export default function OnboardingDetail() {
                 value={followUpCalls}
                 onChange={(e) => setFollowUpCalls(e.target.value)}
                 placeholder="Enter follow-up call notes..."
+                disabled={!canEdit}
               />
-              <button onClick={handleSaveFollowUp} className="btn btn-sm" disabled={saving} style={{ marginTop: 8 }}>
-                {saving ? 'Saving...' : 'Save'}
-              </button>
+              {canEdit && (
+                <button onClick={handleSaveFollowUp} className="btn btn-sm" disabled={saving} style={{ marginTop: 8 }}>
+                  {saving ? 'Saving...' : 'Save'}
+                </button>
+              )}
             </div>
             <div className="form-group">
               <label>Notes</label>
@@ -269,10 +381,13 @@ export default function OnboardingDetail() {
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Add notes about this client..."
+                disabled={!canEdit}
               />
-              <button onClick={handleSaveNotes} className="btn btn-sm" disabled={saving} style={{ marginTop: 8 }}>
-                {saving ? 'Saving...' : 'Save'}
-              </button>
+              {canEdit && (
+                <button onClick={handleSaveNotes} className="btn btn-sm" disabled={saving} style={{ marginTop: 8 }}>
+                  {saving ? 'Saving...' : 'Save'}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -280,6 +395,11 @@ export default function OnboardingDetail() {
         {/* Right: Onboarding Checklist */}
         <div className="checklist-panel">
           <h3>Onboarding Checklist</h3>
+          {!canEdit && (
+            <div className="alert alert-info" style={{ marginBottom: 15 }}>
+              You can view this checklist but cannot make changes. Click "Unlock for Editing" to edit.
+            </div>
+          )}
           {CHECKLIST_SECTIONS.map(section => {
             if (section.conditional && !client[section.conditional]) return null;
             return (
@@ -291,11 +411,13 @@ export default function OnboardingDetail() {
                       key={item.field}
                       className={`checklist-item ${client[item.field] ? 'checked' : ''}`}
                       onClick={() => handleChecklistChange(item.field, client[item.field])}
+                      style={!canEdit ? { cursor: 'default', opacity: 0.7 } : undefined}
                     >
                       <input
                         type="checkbox"
                         checked={!!client[item.field]}
                         readOnly
+                        disabled={!canEdit}
                       />
                       <span className="checklist-label">{item.label}</span>
                     </li>
@@ -313,8 +435,9 @@ export default function OnboardingDetail() {
                 <li
                   className={`checklist-item ${client.CompleteBankEnrollment ? 'checked' : ''}`}
                   onClick={() => handleChecklistChange('CompleteBankEnrollment', client.CompleteBankEnrollment)}
+                  style={!canEdit ? { cursor: 'default', opacity: 0.7 } : undefined}
                 >
-                  <input type="checkbox" checked={!!client.CompleteBankEnrollment} readOnly />
+                  <input type="checkbox" checked={!!client.CompleteBankEnrollment} readOnly disabled={!canEdit} />
                   <span className="checklist-label">Complete Bank Enrollment</span>
                 </li>
               </ul>
@@ -328,14 +451,55 @@ export default function OnboardingDetail() {
               <li
                 className={`checklist-item ${client.InstalledNewVersion ? 'checked' : ''}`}
                 onClick={() => handleChecklistChange('InstalledNewVersion', client.InstalledNewVersion)}
+                style={!canEdit ? { cursor: 'default', opacity: 0.7 } : undefined}
               >
-                <input type="checkbox" checked={!!client.InstalledNewVersion} readOnly />
+                <input type="checkbox" checked={!!client.InstalledNewVersion} readOnly disabled={!canEdit} />
                 <span className="checklist-label">Installed New Version</span>
               </li>
             </ul>
           </div>
         </div>
       </div>
+
+      {/* Client History */}
+      {client.history && client.history.length > 0 && (
+        <div className="progress-section" style={{ marginTop: 20 }}>
+          <h3 style={{ marginTop: 0, color: '#8B4513', borderBottom: '2px solid #8B4513', paddingBottom: 10 }}>
+            Client History
+          </h3>
+          <div style={{ overflowX: 'auto' }}>
+            <table className="tech-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Action</th>
+                  <th>Details</th>
+                  <th>Edited By</th>
+                </tr>
+              </thead>
+              <tbody>
+                {client.history.map(h => (
+                  <tr key={h.HistoryID} style={{ cursor: 'default' }}>
+                    <td style={{ whiteSpace: 'nowrap' }}>{new Date(h.DateEdited).toLocaleString()}</td>
+                    <td>
+                      <span className={`status-badge ${
+                        h.ActionType === 'Client Unlocked' ? 'status-cancelled' :
+                        h.ActionType === 'Client Added' ? 'status-completed' :
+                        h.ActionType === 'Checklist Updated' ? 'status-inprogress' :
+                        'status-notstarted'
+                      }`}>
+                        {h.ActionType}
+                      </span>
+                    </td>
+                    <td>{h.ActionDetails}</td>
+                    <td>{h.EditedByName || 'System'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div style={{ marginTop: '1rem', display: 'flex', gap: 10 }}>
         <Link to="/dashboard" className="btn">Back to Dashboard</Link>

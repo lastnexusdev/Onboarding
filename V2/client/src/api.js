@@ -31,6 +31,7 @@ export const api = {
   updateChecklist: (id, field, value) => request(`/clients/${encodeURIComponent(id)}/checklist`, { method: 'PATCH', body: JSON.stringify({ field, value }) }),
   updateClientStatus: (id, field, value) => request(`/clients/${encodeURIComponent(id)}/status`, { method: 'PATCH', body: JSON.stringify({ field, value }) }),
   updateClientDetails: (id, data) => request(`/clients/${encodeURIComponent(id)}/details`, { method: 'PATCH', body: JSON.stringify(data) }),
+  unlockClient: (id) => request(`/clients/${encodeURIComponent(id)}/unlock`, { method: 'POST' }),
 
   // Users
   getUsers: () => request('/users'),

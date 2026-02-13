@@ -37,8 +37,8 @@ router.put('/:name', authenticate, requireRoles('admin', 'sales'), (req, res) =>
 
 // --- Custom Packages ---
 
-// GET /api/settings/packages - List custom packages
-router.get('/packages', authenticate, requireRoles('admin', 'sales'), (req, res) => {
+// GET /api/settings/packages - List custom packages (all authenticated users can read)
+router.get('/packages', authenticate, (req, res) => {
   const db = req.db;
   const packages = db.prepare('SELECT * FROM CustomPackages ORDER BY PackageName').all();
   res.json(packages.map(p => ({ ...p, Programs: JSON.parse(p.Programs) })));

@@ -41,30 +41,17 @@ function logHistory(db, clientId, actionType, actionDetails, userId) {
   ).run(clientId, actionType, actionDetails, userId);
 }
 
-// GET /api/clients - List all clients (filtered by role)
+// GET /api/clients - List all clients (ALL roles can see all clients)
 router.get('/', authenticate, (req, res) => {
   const db = req.db;
-  let clients;
-  if (req.user.role === 'tech') {
-    clients = db.prepare(`
-      SELECT o.*, u1.FirstName || ' ' || u1.LastName AS TechName,
-             u2.FirstName || ' ' || u2.LastName AS SalesRepName
-      FROM Onboarding o
-      LEFT JOIN Users u1 ON o.AssignedTech = u1.UserID
-      LEFT JOIN Users u2 ON o.SalesRep = u2.UserID
-      WHERE o.AssignedTech = ?
-      ORDER BY o.DateAdded DESC
-    `).all(req.user.userId);
-  } else {
-    clients = db.prepare(`
-      SELECT o.*, u1.FirstName || ' ' || u1.LastName AS TechName,
-             u2.FirstName || ' ' || u2.LastName AS SalesRepName
-      FROM Onboarding o
-      LEFT JOIN Users u1 ON o.AssignedTech = u1.UserID
-      LEFT JOIN Users u2 ON o.SalesRep = u2.UserID
-      ORDER BY o.DateAdded DESC
-    `).all();
-  }
+  const clients = db.prepare(`
+    SELECT o.*, u1.FirstName || ' ' || u1.LastName AS TechName,
+           u2.FirstName || ' ' || u2.LastName AS SalesRepName
+    FROM Onboarding o
+    LEFT JOIN Users u1 ON o.AssignedTech = u1.UserID
+    LEFT JOIN Users u2 ON o.SalesRep = u2.UserID
+    ORDER BY o.DateAdded DESC
+  `).all();
   res.json(clients);
 });
 
@@ -87,7 +74,31 @@ router.get('/:id', authenticate, (req, res) => {
   const details = db.prepare('SELECT * FROM OnboardingDetails WHERE ClientID = ?').get(req.params.id);
   const programs = db.prepare('SELECT * FROM EntitledPrograms WHERE ClientID = ?').get(req.params.id);
 
-  res.json({ ...client, details: details || null, programs: programs || null });
+  // Get client history
+  const history = db.prepare(`
+    SELECT h.*, u.FirstName || ' ' || u.LastName AS EditedByName
+    FROM OnboardingHistory h
+    LEFT JOIN Users u ON h.EditedBy = u.UserID
+    WHERE h.ClientID = ?
+    ORDER BY h.DateEdited DESC
+  `).all(req.params.id);
+
+  // Get uploaded files info
+  const fs = require('fs');
+  const path = require('path');
+  const UPLOAD_DIR = process.env.UPLOAD_DIR || './uploads';
+  let uploadedFiles = [];
+  if (client.UploadToken) {
+    const tokenDir = path.join(UPLOAD_DIR, client.UploadToken);
+    if (fs.existsSync(tokenDir)) {
+      uploadedFiles = fs.readdirSync(tokenDir).map(name => {
+        const stats = fs.statSync(path.join(tokenDir, name));
+        return { name, size: stats.size, modified: stats.mtime };
+      });
+    }
+  }
+
+  res.json({ ...client, details: details || null, programs: programs || null, history, uploadedFiles });
 });
 
 // POST /api/clients - Add new client
@@ -134,10 +145,20 @@ router.post('/', authenticate, requireRoles('admin', 'sales'), (req, res) => {
     allProgs.forEach(p => programs[p] = 1);
   } else if (pkg === 'Business') {
     allProgs.forEach(p => programs[p] = businessProgs.includes(p) ? 1 : 0);
-  } else if (pkg === 'Custom' && customPrograms) {
+  } else if (pkg === 'Individual') {
+    allProgs.forEach(p => programs[p] = individualProgs.includes(p) ? 1 : 0);
+  } else if (customPrograms && Array.isArray(customPrograms)) {
+    // Custom package or saved custom package - use customPrograms array
     allProgs.forEach(p => programs[p] = customPrograms.includes(p) ? 1 : 0);
   } else {
-    allProgs.forEach(p => programs[p] = individualProgs.includes(p) ? 1 : 0);
+    // Check if it's a saved custom package
+    const customPkg = db.prepare('SELECT Programs FROM CustomPackages WHERE PackageName = ?').get(pkg);
+    if (customPkg) {
+      const pkgPrograms = JSON.parse(customPkg.Programs);
+      allProgs.forEach(p => programs[p] = pkgPrograms.includes(p) ? 1 : 0);
+    } else {
+      allProgs.forEach(p => programs[p] = individualProgs.includes(p) ? 1 : 0);
+    }
   }
 
   const transaction = db.transaction(() => {
@@ -186,7 +207,7 @@ router.post('/', authenticate, requireRoles('admin', 'sales'), (req, res) => {
   }
 });
 
-// PUT /api/clients/:id - Update client
+// PUT /api/clients/:id - Update client (admin/sales only, or unlocked user)
 router.put('/:id', authenticate, requireRoles('admin', 'sales'), (req, res) => {
   const db = req.db;
   const clientId = req.params.id;
@@ -361,6 +382,25 @@ router.patch('/:id/status', authenticate, (req, res) => {
   res.json({ success: true });
 });
 
+// POST /api/clients/:id/unlock - Unlock a client for editing (logs to history)
+router.post('/:id/unlock', authenticate, (req, res) => {
+  const db = req.db;
+  const client = db.prepare('SELECT ClientID, ClientName, AssignedTech FROM Onboarding WHERE ClientID = ?').get(req.params.id);
+  if (!client) {
+    return res.status(404).json({ error: 'Client not found' });
+  }
+
+  logHistory(
+    db,
+    req.params.id,
+    'Client Unlocked',
+    `Client "${client.ClientName}" was unlocked for editing by ${req.user.firstName} ${req.user.lastName} (${req.user.username}). This is not their assigned client.`,
+    req.user.userId
+  );
+
+  res.json({ success: true });
+});
+
 // DELETE /api/clients - Bulk delete clients
 router.delete('/', authenticate, requireRoles('admin', 'sales'), (req, res) => {
   const db = req.db;
@@ -387,7 +427,7 @@ router.delete('/', authenticate, requireRoles('admin', 'sales'), (req, res) => {
   }
 });
 
-// PATCH /api/clients/:id/details - Update client details (notes, callouts)
+// PATCH /api/clients/:id/details - Update client details (notes, callouts) with individual history
 router.patch('/:id/details', authenticate, (req, res) => {
   const db = req.db;
   const { notes, firstCallout, followUpCalls } = req.body;
@@ -398,16 +438,30 @@ router.patch('/:id/details', authenticate, (req, res) => {
       req.params.id, notes || '', firstCallout || null, followUpCalls || null
     );
   } else {
-    db.prepare(`
-      UPDATE OnboardingDetails SET
-        Notes = COALESCE(?, Notes),
-        FirstCallout = COALESCE(?, FirstCallout),
-        FollowUpCalls = COALESCE(?, FollowUpCalls)
-      WHERE ClientID = ?
-    `).run(notes ?? null, firstCallout ?? null, followUpCalls ?? null, req.params.id);
+    if (notes !== undefined) {
+      db.prepare('UPDATE OnboardingDetails SET Notes = ? WHERE ClientID = ?').run(notes, req.params.id);
+    }
+    if (firstCallout !== undefined) {
+      db.prepare('UPDATE OnboardingDetails SET FirstCallout = ? WHERE ClientID = ?').run(firstCallout, req.params.id);
+    }
+    if (followUpCalls !== undefined) {
+      db.prepare('UPDATE OnboardingDetails SET FollowUpCalls = ? WHERE ClientID = ?').run(followUpCalls, req.params.id);
+    }
   }
 
-  logHistory(db, req.params.id, 'Details Updated', 'Client details updated', req.user.userId);
+  // Log individual history entries like the original PHP
+  if (firstCallout !== undefined) {
+    logHistory(db, req.params.id, 'First Callout', `First callout completed on ${firstCallout}`, req.user.userId);
+  }
+  if (followUpCalls !== undefined) {
+    const truncated = followUpCalls.length > 100 ? followUpCalls.substring(0, 100) + '...' : followUpCalls;
+    logHistory(db, req.params.id, 'Follow Up Calls', `Follow up calls updated: ${truncated}`, req.user.userId);
+  }
+  if (notes !== undefined) {
+    const truncated = notes.length > 100 ? notes.substring(0, 100) + '...' : notes;
+    logHistory(db, req.params.id, 'Notes Updated', `Notes updated: ${truncated}`, req.user.userId);
+  }
+
   res.json({ success: true });
 });
 
