@@ -2,7 +2,6 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const db = require('../db');
 
 const router = express.Router();
 const UPLOAD_DIR = process.env.UPLOAD_DIR || './uploads';
@@ -35,6 +34,7 @@ const upload = multer({
 
 // GET /api/uploads/:token - Validate upload token and get client info
 router.get('/:token', (req, res) => {
+  const db = req.db;
   const client = db.prepare('SELECT ClientID, ClientName FROM Onboarding WHERE UploadToken = ?').get(req.params.token);
   if (!client) {
     return res.status(404).json({ error: 'Invalid upload token' });
@@ -44,6 +44,7 @@ router.get('/:token', (req, res) => {
 
 // POST /api/uploads/:token - Upload file(s)
 router.post('/:token', upload.array('files', 20), (req, res) => {
+  const db = req.db;
   const client = db.prepare('SELECT ClientID FROM Onboarding WHERE UploadToken = ?').get(req.params.token);
   if (!client) {
     return res.status(404).json({ error: 'Invalid upload token' });
@@ -64,6 +65,7 @@ router.post('/:token', upload.array('files', 20), (req, res) => {
 
 // POST /api/uploads/:token/chunk - Chunked upload handler
 router.post('/:token/chunk', upload.single('chunk'), (req, res) => {
+  const db = req.db;
   const client = db.prepare('SELECT ClientID FROM Onboarding WHERE UploadToken = ?').get(req.params.token);
   if (!client) {
     return res.status(404).json({ error: 'Invalid upload token' });

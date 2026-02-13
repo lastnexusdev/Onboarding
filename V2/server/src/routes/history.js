@@ -1,11 +1,11 @@
 const express = require('express');
-const db = require('../db');
 const { authenticate, requireRoles } = require('../middleware/auth');
 
 const router = express.Router();
 
 // GET /api/history - Get audit trail
 router.get('/', authenticate, requireRoles('admin'), (req, res) => {
+  const db = req.db;
   const { clientId, userId, limit = 100, offset = 0 } = req.query;
 
   let where = [];
@@ -40,6 +40,7 @@ router.get('/', authenticate, requireRoles('admin'), (req, res) => {
 
 // PUT /api/history/:id - Update history entry (admin)
 router.put('/:id', authenticate, requireRoles('admin'), (req, res) => {
+  const db = req.db;
   const { actionType, actionDetails } = req.body;
 
   db.prepare(`
@@ -54,6 +55,7 @@ router.put('/:id', authenticate, requireRoles('admin'), (req, res) => {
 
 // DELETE /api/history/:id - Delete history entry (admin)
 router.delete('/:id', authenticate, requireRoles('admin'), (req, res) => {
+  const db = req.db;
   const result = db.prepare('DELETE FROM OnboardingHistory WHERE HistoryID = ?').run(req.params.id);
   if (result.changes === 0) return res.status(404).json({ error: 'History entry not found' });
   res.json({ success: true });

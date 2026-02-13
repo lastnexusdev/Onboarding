@@ -1,12 +1,12 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const db = require('../db');
 const { authenticate, requireRoles } = require('../middleware/auth');
 
 const router = express.Router();
 
 // GET /api/users - List all users
 router.get('/', authenticate, (req, res) => {
+  const db = req.db;
   const users = db.prepare(`
     SELECT UserID, Username, FirstName, LastName, Email, Role, Department, Spanish, StartHour, EndHour, CreatedAt
     FROM Users ORDER BY UserID
@@ -16,6 +16,7 @@ router.get('/', authenticate, (req, res) => {
 
 // GET /api/users/techs - List technicians only
 router.get('/techs', authenticate, (req, res) => {
+  const db = req.db;
   const techs = db.prepare(`
     SELECT UserID, Username, FirstName, LastName, Email, Spanish
     FROM Users WHERE Role = 'tech' OR Department = 2
@@ -26,6 +27,7 @@ router.get('/techs', authenticate, (req, res) => {
 
 // GET /api/users/:id - Get single user
 router.get('/:id', authenticate, (req, res) => {
+  const db = req.db;
   const user = db.prepare(`
     SELECT UserID, Username, FirstName, LastName, Email, Role, Department, Spanish, StartHour, EndHour
     FROM Users WHERE UserID = ?
@@ -37,6 +39,7 @@ router.get('/:id', authenticate, (req, res) => {
 
 // POST /api/users - Create user (admin only)
 router.post('/', authenticate, requireRoles('admin'), (req, res) => {
+  const db = req.db;
   const { username, password, firstName, lastName, email, role, department, spanish } = req.body;
 
   if (!username || !password) {
@@ -59,6 +62,7 @@ router.post('/', authenticate, requireRoles('admin'), (req, res) => {
 
 // PUT /api/users/:id - Update user (admin only)
 router.put('/:id', authenticate, requireRoles('admin'), (req, res) => {
+  const db = req.db;
   const { username, password, firstName, lastName, email, role, department, spanish } = req.body;
   const userId = req.params.id;
 
@@ -87,6 +91,7 @@ router.put('/:id', authenticate, requireRoles('admin'), (req, res) => {
 
 // DELETE /api/users/:id - Delete user (admin only)
 router.delete('/:id', authenticate, requireRoles('admin'), (req, res) => {
+  const db = req.db;
   const userId = req.params.id;
   if (parseInt(userId) === req.user.userId) {
     return res.status(400).json({ error: 'Cannot delete your own account' });

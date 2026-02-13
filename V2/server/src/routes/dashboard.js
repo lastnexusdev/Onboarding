@@ -1,11 +1,11 @@
 const express = require('express');
-const db = require('../db');
 const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
 
 // GET /api/dashboard - Get dashboard statistics
 router.get('/', authenticate, (req, res) => {
+  const db = req.db;
   let whereClause = '';
   let params = [];
 

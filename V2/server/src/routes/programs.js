@@ -1,11 +1,11 @@
 const express = require('express');
-const db = require('../db');
 const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
 
 // GET /api/programs/:clientId - Get entitled programs for a client
 router.get('/:clientId', authenticate, (req, res) => {
+  const db = req.db;
   const programs = db.prepare('SELECT * FROM EntitledPrograms WHERE ClientID = ?').get(req.params.clientId);
   if (!programs) {
     return res.status(404).json({ error: 'Programs not found for this client' });
@@ -15,6 +15,7 @@ router.get('/:clientId', authenticate, (req, res) => {
 
 // PUT /api/programs/:clientId - Update entitled programs
 router.put('/:clientId', authenticate, (req, res) => {
+  const db = req.db;
   const { programs } = req.body;
   const allProgs = ['prog_1040','prog_Depreciation','prog_Proforma','prog_1120','prog_1120S','prog_1065','prog_1041','prog_706Estate','prog_709Gift','prog_990Exempt','prog_DocArk','prog_1099Acc'];
 

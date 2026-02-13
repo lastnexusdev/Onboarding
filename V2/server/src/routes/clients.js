@@ -1,12 +1,11 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
-const db = require('../db');
 const { authenticate, requireRoles } = require('../middleware/auth');
 
 const router = express.Router();
 
 // Helper: calculate progress for a client
-function calculateProgress(client) {
+function calculateProgress(db, client) {
   const newRelease = db.prepare("SELECT SettingValue FROM AdminSettings WHERE SettingName = 'NewSoftwareRelease'").get();
   const isNewRelease = newRelease && newRelease.SettingValue === '1';
 
@@ -36,7 +35,7 @@ function calculateProgress(client) {
 }
 
 // Helper: log history
-function logHistory(clientId, actionType, actionDetails, userId) {
+function logHistory(db, clientId, actionType, actionDetails, userId) {
   db.prepare(
     'INSERT INTO OnboardingHistory (ClientID, ActionType, ActionDetails, EditedBy) VALUES (?, ?, ?, ?)'
   ).run(clientId, actionType, actionDetails, userId);
@@ -44,6 +43,7 @@ function logHistory(clientId, actionType, actionDetails, userId) {
 
 // GET /api/clients - List all clients (filtered by role)
 router.get('/', authenticate, (req, res) => {
+  const db = req.db;
   let clients;
   if (req.user.role === 'tech') {
     clients = db.prepare(`
@@ -70,6 +70,7 @@ router.get('/', authenticate, (req, res) => {
 
 // GET /api/clients/:id - Get single client with details and programs
 router.get('/:id', authenticate, (req, res) => {
+  const db = req.db;
   const client = db.prepare(`
     SELECT o.*, u1.FirstName || ' ' || u1.LastName AS TechName,
            u2.FirstName || ' ' || u2.LastName AS SalesRepName
@@ -91,6 +92,7 @@ router.get('/:id', authenticate, (req, res) => {
 
 // POST /api/clients - Add new client
 router.post('/', authenticate, requireRoles('admin', 'sales'), (req, res) => {
+  const db = req.db;
   const {
     clientId, clientName, dateAdded, assignedTech, salesRep,
     email, phoneNumber, previousSoftware, conversionNeeded,
@@ -122,18 +124,6 @@ router.post('/', authenticate, requireRoles('admin', 'sales'), (req, res) => {
 
   const uploadToken = uuidv4();
 
-  const insertClient = db.prepare(`
-    INSERT INTO Onboarding (
-      ClientID, ClientName, DateAdded, AssignedTech, SalesRep,
-      Email, PhoneNumber, PreviousSoftware, ConversionNeeded,
-      Spanish, BankEnrollment, Package, ReadyToCall, UploadToken, Progress
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
-  `);
-
-  const insertDetails = db.prepare(`
-    INSERT INTO OnboardingDetails (ClientID, Notes) VALUES (?, ?)
-  `);
-
   // Determine programs based on package
   let programs = {};
   const allProgs = ['prog_1040','prog_Depreciation','prog_Proforma','prog_1120','prog_1120S','prog_1065','prog_1041','prog_706Estate','prog_709Gift','prog_990Exempt','prog_DocArk','prog_1099Acc'];
@@ -147,19 +137,17 @@ router.post('/', authenticate, requireRoles('admin', 'sales'), (req, res) => {
   } else if (pkg === 'Custom' && customPrograms) {
     allProgs.forEach(p => programs[p] = customPrograms.includes(p) ? 1 : 0);
   } else {
-    // Individual (default)
     allProgs.forEach(p => programs[p] = individualProgs.includes(p) ? 1 : 0);
   }
 
-  const insertPrograms = db.prepare(`
-    INSERT INTO EntitledPrograms (ClientID, prog_1040, prog_Depreciation, prog_Proforma,
-      prog_1120, prog_1120S, prog_1065, prog_1041, prog_706Estate, prog_709Gift,
-      prog_990Exempt, prog_DocArk, prog_1099Acc)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
   const transaction = db.transaction(() => {
-    insertClient.run(
+    db.prepare(`
+      INSERT INTO Onboarding (
+        ClientID, ClientName, DateAdded, AssignedTech, SalesRep,
+        Email, PhoneNumber, PreviousSoftware, ConversionNeeded,
+        Spanish, BankEnrollment, Package, ReadyToCall, UploadToken, Progress
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+    `).run(
       clientId, clientName, dateAdded || new Date().toISOString().split('T')[0],
       techId, salesRep || req.user.userId,
       email || '', phoneNumber || '', previousSoftware || '',
@@ -167,9 +155,14 @@ router.post('/', authenticate, requireRoles('admin', 'sales'), (req, res) => {
       pkg || 'Individual', readyToCall ? 1 : 0, uploadToken
     );
 
-    insertDetails.run(clientId, notes || '');
+    db.prepare('INSERT INTO OnboardingDetails (ClientID, Notes) VALUES (?, ?)').run(clientId, notes || '');
 
-    insertPrograms.run(
+    db.prepare(`
+      INSERT INTO EntitledPrograms (ClientID, prog_1040, prog_Depreciation, prog_Proforma,
+        prog_1120, prog_1120S, prog_1065, prog_1041, prog_706Estate, prog_709Gift,
+        prog_990Exempt, prog_DocArk, prog_1099Acc)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
       clientId, programs.prog_1040, programs.prog_Depreciation, programs.prog_Proforma,
       programs.prog_1120, programs.prog_1120S, programs.prog_1065, programs.prog_1041,
       programs.prog_706Estate, programs.prog_709Gift, programs.prog_990Exempt,
@@ -182,7 +175,7 @@ router.post('/', authenticate, requireRoles('admin', 'sales'), (req, res) => {
       );
     }
 
-    logHistory(clientId, 'Client Added', `Client "${clientName}" added by ${req.user.username}`, req.user.userId);
+    logHistory(db, clientId, 'Client Added', `Client "${clientName}" added by ${req.user.username}`, req.user.userId);
   });
 
   try {
@@ -195,6 +188,7 @@ router.post('/', authenticate, requireRoles('admin', 'sales'), (req, res) => {
 
 // PUT /api/clients/:id - Update client
 router.put('/:id', authenticate, requireRoles('admin', 'sales'), (req, res) => {
+  const db = req.db;
   const clientId = req.params.id;
   const existing = db.prepare('SELECT * FROM Onboarding WHERE ClientID = ?').get(clientId);
   if (!existing) {
@@ -288,7 +282,7 @@ router.put('/:id', authenticate, requireRoles('admin', 'sales'), (req, res) => {
   }
 
   if (changes.length > 0) {
-    logHistory(newClientId || clientId, 'Client Updated', changes.join('; '), req.user.userId);
+    logHistory(db, newClientId || clientId, 'Client Updated', changes.join('; '), req.user.userId);
   }
 
   res.json({ success: true });
@@ -296,6 +290,7 @@ router.put('/:id', authenticate, requireRoles('admin', 'sales'), (req, res) => {
 
 // PATCH /api/clients/:id/checklist - Update checklist item
 router.patch('/:id/checklist', authenticate, (req, res) => {
+  const db = req.db;
   const { field, value } = req.body;
   const validFields = [
     'ConfirmContactInfo', 'ReviewRequirements', 'ScheduleAppointment',
@@ -320,7 +315,7 @@ router.patch('/:id/checklist', authenticate, (req, res) => {
     return res.status(404).json({ error: 'Client not found' });
   }
 
-  const progress = calculateProgress(client);
+  const progress = calculateProgress(db, client);
 
   // Update completion status
   let completed = 0;
@@ -341,13 +336,14 @@ router.patch('/:id/checklist', authenticate, (req, res) => {
     WHERE ClientID = ?
   `).run(progress, completed, completedUntilNewVersion, req.params.id);
 
-  logHistory(req.params.id, 'Checklist Updated', `${field} set to ${val}`, req.user.userId);
+  logHistory(db, req.params.id, 'Checklist Updated', `${field} set to ${val}`, req.user.userId);
 
   res.json({ success: true, progress, completed, completedUntilNewVersion });
 });
 
 // PATCH /api/clients/:id/status - Update client status fields
 router.patch('/:id/status', authenticate, (req, res) => {
+  const db = req.db;
   const { field, value } = req.body;
   const validFields = ['ReadyToCall', 'Stalled', 'Cancelled', 'RowColor'];
 
@@ -361,12 +357,13 @@ router.patch('/:id/status', authenticate, (req, res) => {
     db.prepare(`UPDATE Onboarding SET ${field} = ?, UpdatedAt = datetime('now') WHERE ClientID = ?`).run(value ? 1 : 0, req.params.id);
   }
 
-  logHistory(req.params.id, 'Status Updated', `${field} set to ${value}`, req.user.userId);
+  logHistory(db, req.params.id, 'Status Updated', `${field} set to ${value}`, req.user.userId);
   res.json({ success: true });
 });
 
 // DELETE /api/clients - Bulk delete clients
 router.delete('/', authenticate, requireRoles('admin', 'sales'), (req, res) => {
+  const db = req.db;
   const { clientIds } = req.body;
   if (!Array.isArray(clientIds) || clientIds.length === 0) {
     return res.status(400).json({ error: 'No client IDs provided' });
@@ -392,6 +389,7 @@ router.delete('/', authenticate, requireRoles('admin', 'sales'), (req, res) => {
 
 // PATCH /api/clients/:id/details - Update client details (notes, callouts)
 router.patch('/:id/details', authenticate, (req, res) => {
+  const db = req.db;
   const { notes, firstCallout, followUpCalls } = req.body;
 
   const existing = db.prepare('SELECT * FROM OnboardingDetails WHERE ClientID = ?').get(req.params.id);
@@ -409,7 +407,7 @@ router.patch('/:id/details', authenticate, (req, res) => {
     `).run(notes ?? null, firstCallout ?? null, followUpCalls ?? null, req.params.id);
   }
 
-  logHistory(req.params.id, 'Details Updated', 'Client details updated', req.user.userId);
+  logHistory(db, req.params.id, 'Details Updated', 'Client details updated', req.user.userId);
   res.json({ success: true });
 });
 

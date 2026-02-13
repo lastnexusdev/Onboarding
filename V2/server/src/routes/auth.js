@@ -1,7 +1,6 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const db = require('../db');
 const { JWT_SECRET, authenticate } = require('../middleware/auth');
 
 const router = express.Router();
@@ -12,6 +11,7 @@ router.post('/login', (req, res) => {
     return res.status(400).json({ error: 'Username and password are required' });
   }
 
+  const db = req.db;
   const user = db.prepare('SELECT * FROM Users WHERE Username = ?').get(username);
   if (!user) {
     return res.status(401).json({ error: 'Invalid credentials' });
@@ -50,6 +50,7 @@ router.post('/login', (req, res) => {
 });
 
 router.get('/me', authenticate, (req, res) => {
+  const db = req.db;
   const user = db.prepare('SELECT UserID, Username, FirstName, LastName, Email, Role, Department, Spanish FROM Users WHERE UserID = ?').get(req.user.userId);
   if (!user) {
     return res.status(404).json({ error: 'User not found' });

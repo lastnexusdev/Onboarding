@@ -1,11 +1,11 @@
 const express = require('express');
-const db = require('../db');
 const { authenticate, requireRoles } = require('../middleware/auth');
 
 const router = express.Router();
 
 // GET /api/reports - Get reports data
 router.get('/', authenticate, requireRoles('admin', 'sales'), (req, res) => {
+  const db = req.db;
   // Tech assignments report
   const techAssignments = db.prepare(`
     SELECT u.UserID, u.FirstName, u.LastName,
