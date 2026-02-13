@@ -1,6 +1,7 @@
 <?php
 require_once "auth_check.php"; // forces login check
 include 'db.php';
+require_once "csrf_helper.php";
 
 $currentPage = 'remove';
 
@@ -16,8 +17,13 @@ $success_message = '';
 $error_message = '';
 $warning_message = '';
 
+// CSRF validation for all POST requests
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && !validate_csrf_token()) {
+    $error_message = "Invalid request. Please try again.";
+}
+
 // Handle form submission for deleting clients
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_clients'])) {
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_clients']) && empty($error_message)) {
     $clients_to_delete = $_POST['clients_to_delete'] ?? [];
     
     if (!empty($clients_to_delete)) {
@@ -102,7 +108,6 @@ while ($client = $clients_result->fetch_assoc()) {
 <head>
     <meta charset="UTF-8">
     <title>Remove Clients</title>
-    <link rel="stylesheet" type="text/css" href="../style.css">
     <link rel="stylesheet" type="text/css" href="styles.css">
     <style>
         body {
@@ -600,6 +605,7 @@ while ($client = $clients_result->fetch_assoc()) {
 
             <?php if ($total_clients > 0): ?>
                 <form method="POST" action="" id="deleteForm">
+                    <?php echo csrf_token_field(); ?>
                     <!-- Table Controls -->
                     <div class="table-controls">
                         <div class="search-box">

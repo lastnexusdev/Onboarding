@@ -1,0 +1,11 @@
+# Deny access to log files
+<FilesMatch "\.(log|txt)$">
+    Require all denied
+</FilesMatch>
+
+# Deny access to data directory
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^data/ - [F,L]
+    RewriteRule ^logs/ - [F,L]
+</IfModule>

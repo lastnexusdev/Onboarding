@@ -1,9 +1,10 @@
 <?php
 require_once "auth_check.php"; // forces login check
 include 'db.php';
+require_once "csrf_helper.php";
 
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
 error_reporting(E_ALL);
 
 // Check if the user is logged in
@@ -190,7 +191,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['create_folder']) && $i
     // Create the folder
     $upload_folder = __DIR__ . '/data/' . $upload_token;
     if (!file_exists($upload_folder)) {
-        mkdir($upload_folder, 0777, true);
+        mkdir($upload_folder, 0755, true);
     }
     
     // Refresh to show the upload link
@@ -371,7 +372,7 @@ $progress_percentage = $total_items > 0 ? ($completed_items / $total_items) * 10
 <head>
     <meta charset="UTF-8">
     <title>Onboarding Details - <?php echo htmlspecialchars($client['ClientName']); ?></title>
-    <link rel="stylesheet" type="text/css" href="../style.css">
+    <!-- styles loaded from styles.css -->
     <link rel="stylesheet" type="text/css" href="styles.css">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <style>
@@ -1031,6 +1032,7 @@ $progress_percentage = $total_items > 0 ? ($completed_items / $total_items) * 10
                 <div class="additional-info">
                     <h3>Additional Information</h3>
                     <form method="POST" action="">
+                        <?php echo csrf_token_field(); ?>
                         <div class="form-group">
                             <label for="FirstCallout">First Callout</label>
                             <input type="date" id="FirstCallout" name="FirstCallout" value="<?php echo isset($details['FirstCallout']) ? htmlspecialchars($details['FirstCallout']) : date('Y-m-d'); ?>" <?php echo isset($details['FirstCallout']) ? 'disabled' : ''; ?> <?php echo $is_assigned_tech ? '' : 'disabled'; ?>>
@@ -1041,6 +1043,7 @@ $progress_percentage = $total_items > 0 ? ($completed_items / $total_items) * 10
                     </form>
                     
                     <form method="POST" action="">
+                        <?php echo csrf_token_field(); ?>
                         <div class="form-group">
                             <label for="FollowUpCalls">Follow Up Calls</label>
                             <textarea id="FollowUpCalls" name="FollowUpCalls" <?php echo $is_assigned_tech ? '' : 'disabled'; ?>><?php echo htmlspecialchars($details['FollowUpCalls'] ?? ''); ?></textarea>
@@ -1051,6 +1054,7 @@ $progress_percentage = $total_items > 0 ? ($completed_items / $total_items) * 10
                     </form>
                     
                     <form method="POST" action="">
+                        <?php echo csrf_token_field(); ?>
                         <div class="form-group">
                             <label for="Notes">Notes</label>
                             <textarea id="Notes" name="Notes" <?php echo $is_assigned_tech ? '' : 'disabled'; ?>><?php echo htmlspecialchars($details['Notes'] ?? ''); ?></textarea>
@@ -1065,6 +1069,7 @@ $progress_percentage = $total_items > 0 ? ($completed_items / $total_items) * 10
                     <?php if (empty($upload_token)): ?>
                         <div style="margin-top: 20px;">
                             <form method="POST" action="">
+                                <?php echo csrf_token_field(); ?>
                                 <input type="hidden" name="client_id" value="<?php echo htmlspecialchars($client['ClientID']); ?>">
                                 <button type="submit" name="create_folder" class="btn">Create Folder for Files</button>
                             </form>
@@ -1089,6 +1094,7 @@ $progress_percentage = $total_items > 0 ? ($completed_items / $total_items) * 10
                 <?php endif; ?>
             </div>
 <form method="POST" action="" class="checklist">
+                <?php echo csrf_token_field(); ?>
                 <h3>Onboarding Checklist</h3>
                 <?php foreach ($checklist_items as $section => $items): ?>
                     <?php if ($section != 'Client Data Conversion' || $client['ConvertionNeeded'] === 'Yes'): ?>
@@ -1155,6 +1161,7 @@ $progress_percentage = $total_items > 0 ? ($completed_items / $total_items) * 10
                 <span class="close" onclick="closeModal()">&times;</span>
                 <h3 style="margin-top: 0; color: #8B4513;">Edit Action Details</h3>
                 <form method="POST" action="">
+                    <?php echo csrf_token_field(); ?>
                     <input type="hidden" id="history_id" name="history_id">
                     <div class="form-group">
                         <label for="new_details">Action Details:</label>

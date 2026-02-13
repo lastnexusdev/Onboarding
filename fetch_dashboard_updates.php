@@ -1,5 +1,14 @@
 <?php
+session_start();
 include 'db.php';
+
+header('Content-Type: application/json');
+
+// Authentication check
+if (!isset($_SESSION['userid'])) {
+    echo json_encode(['success' => false, 'error' => 'Access denied.']);
+    exit;
+}
 
 // Fetch New Software Release setting
 $software_release_sql = "SELECT Setting_Value FROM admin_settings WHERE Setting_Name = 'NewSoftwareRelease'";

@@ -71,8 +71,10 @@ $client_result = $stmt->get_result();
 $client = $client_result->fetch_assoc();
 $stmt->close();
 
-if ($client['ConvertionNeeded'] === 'Yes') {
-    $checklist_items['Client Data Conversion'] = array_merge($checklist_items['Client Data Conversion'], ['VerifyPlanData', 'ExecuteConversion', 'VerifyIntegrity', 'TransferSetupData']);
+if (!$client) {
+    error_log("Client not found for client_id: {$client_id}");
+    echo json_encode(['success' => false, 'error' => 'Client not found.']);
+    exit;
 }
 
 if ($client['BankEnrollment'] === 'Yes') {
@@ -105,7 +107,7 @@ if ($stmt === false) {
 $stmt->bind_param('is', $status, $client_id); // Bind client_id as a string
 
 if ($stmt->execute() === false) {
-    error_log("Failed to execute update_progress_sql: " . $stmt->error . " with Progress Percentage: $progress_percentage and Client ID: $client_id");
+    error_log("Failed to execute checklist update: " . $stmt->error . " for item: $item, Client ID: $client_id");
     echo json_encode(['success' => false, 'error' => 'Failed to execute statement.']);
     exit;
 }
@@ -138,11 +140,7 @@ foreach ($checklist_items as $section => $section_items) {
 }
 
 $progress_percentage = $total_items > 0 ? round(($completed_items / $total_items) * 100, 2) : 0.00;
-error_log("Calculated progress_percentage: $progress_percentage for client_id: $client_id"); // Log the progress value
-
-
-$progress_percentage = $total_items > 0 ? round(($completed_items / $total_items) * 100, 2) : 0.00;
-error_log("Calculated progress_percentage: $progress_percentage for client_id: $client_id"); // Log the progress value
+error_log("Calculated progress_percentage: $progress_percentage for client_id: $client_id");
 
 // Update progress in the database
 $update_progress_sql = "UPDATE Onboarding SET Progress = ? WHERE ClientID = ?";

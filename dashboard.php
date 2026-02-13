@@ -50,7 +50,9 @@ if ($_SESSION['department'] == 2) {
         SUM(CASE WHEN Cancelled = 1 THEN 1 ELSE 0 END) as cancelled,
         AVG(Progress) as avg_progress
     FROM Onboarding 
-    WHERE AssignedTech = '" . $_SESSION['userid'] . "'";
+    WHERE AssignedTech = ?";
+    $stats_stmt = $conn->prepare($stats_sql);
+    $stats_stmt->bind_param('i', $_SESSION['userid']);
 } else {
     // Admin/Sales - show all clients
     $stats_sql = "SELECT 
@@ -63,8 +65,16 @@ if ($_SESSION['department'] == 2) {
         AVG(Progress) as avg_progress
     FROM Onboarding";
 }
-$stats_result = $conn->query($stats_sql);
-$stats = $stats_result->fetch_assoc();
+
+if (isset($stats_stmt)) {
+    $stats_stmt->execute();
+    $stats_result = $stats_stmt->get_result();
+    $stats = $stats_result->fetch_assoc();
+    $stats_stmt->close();
+} else {
+    $stats_result = $conn->query($stats_sql);
+    $stats = $stats_result->fetch_assoc();
+}
 
 ?>
 
@@ -73,7 +83,6 @@ $stats = $stats_result->fetch_assoc();
 <head>
     <meta charset="UTF-8">
     <title>Tech Dashboard</title>
-    <link rel="stylesheet" type="text/css" href="../style.css">
     <link rel="stylesheet" type="text/css" href="styles.css">
 <style>
     body {
@@ -586,12 +595,16 @@ $stats = $stats_result->fetch_assoc();
         </div>
 
         <!-- Tech Container -->
+        <?php $pending_updates = []; ?>
         <div class="tech-container">
             <?php foreach ($techs as $tech): ?>
                 <?php
                 // Fetch clients assigned to this tech with counts
-                $clients_sql = "SELECT ClientID, ClientName, PhoneNumber, Progress, Completed, ConvertionNeeded AS ConversionStatus, SalesRep, Package, CompletedUntilNewVersion, Cancelled, Stalled, RowColor FROM Onboarding WHERE AssignedTech = '" . $tech['UserID'] . "'";
-                $clients_result = $conn->query($clients_sql);
+                $clients_sql = "SELECT ClientID, ClientName, PhoneNumber, Progress, Completed, ConvertionNeeded AS ConversionStatus, SalesRep, Package, CompletedUntilNewVersion, Cancelled, Stalled, RowColor FROM Onboarding WHERE AssignedTech = ?";
+                $clients_stmt = $conn->prepare($clients_sql);
+                $clients_stmt->bind_param('i', $tech['UserID']);
+                $clients_stmt->execute();
+                $clients_result = $clients_stmt->get_result();
                 
                 $client_count = $clients_result->num_rows;
                 $completed_count = 0;
@@ -634,7 +647,7 @@ $stats = $stats_result->fetch_assoc();
                             <?php if (count($clients) > 0): ?>
                                 <?php foreach($clients as $client): ?>
                                     <?php
-                                    // Determine the row color
+                                    // Determine the row color (display only - DB updates are batched below)
                                     $row_color = '';
                                     if ($client['Cancelled']) {
                                         $row_color = '#D3D3D3';
@@ -642,14 +655,12 @@ $stats = $stats_result->fetch_assoc();
                                         if ($new_software_release == 0) {
                                             $row_color = '#ADD8E6';
                                             if ($client['CompletedUntilNewVersion'] == 0) {
-                                                $update_completed_until_sql = "UPDATE Onboarding SET CompletedUntilNewVersion = 1 WHERE ClientID = '" . $client['ClientID'] . "'";
-                                                $conn->query($update_completed_until_sql);
+                                                $pending_updates[] = ['type' => 'completed_until', 'client_id' => $client['ClientID']];
                                             }
                                         } elseif ($new_software_release == 1) {
                                             $row_color = '#32CD32';
                                             if ($client['Completed'] == 0) {
-                                                $update_completed_sql = "UPDATE Onboarding SET Completed = 1 WHERE ClientID = '" . $client['ClientID'] . "'";
-                                                $conn->query($update_completed_sql);
+                                                $pending_updates[] = ['type' => 'completed', 'client_id' => $client['ClientID']];
                                             }
                                         }
                                     } elseif ($client['Stalled']) {
@@ -658,11 +669,9 @@ $stats = $stats_result->fetch_assoc();
                                         $row_color = '#FFD700';
                                     }
 
-                                    // Update the RowColor in the database if it has changed
+                                    // Queue RowColor update if changed
                                     if ($client['RowColor'] !== $row_color) {
-                                        $update_color_sql = "UPDATE Onboarding SET RowColor = '$row_color' WHERE ClientID = '" . $client['ClientID'] . "'";
-                                        $conn->query($update_color_sql);
-                                        log_message("Updated RowColor for ClientID " . $client['ClientID'] . " to " . $row_color);
+                                        $pending_updates[] = ['type' => 'row_color', 'client_id' => $client['ClientID'], 'color' => $row_color];
                                     }
                                     ?>
                                     <tr style="background-color: <?php echo htmlspecialchars($row_color); ?>" onclick="goToDetail('<?php echo htmlspecialchars($client['ClientID']); ?>')">
@@ -703,7 +712,33 @@ $stats = $stats_result->fetch_assoc();
             <?php endforeach; ?>
         </div>
     </div>
+
+<?php
+// Process all pending database updates after rendering
+foreach ($pending_updates as $update) {
+    switch ($update['type']) {
+        case 'completed_until':
+            $upd_stmt = $conn->prepare("UPDATE Onboarding SET CompletedUntilNewVersion = 1 WHERE ClientID = ?");
+            $upd_stmt->bind_param('s', $update['client_id']);
+            $upd_stmt->execute();
+            $upd_stmt->close();
+            break;
+        case 'completed':
+            $upd_stmt = $conn->prepare("UPDATE Onboarding SET Completed = 1 WHERE ClientID = ?");
+            $upd_stmt->bind_param('s', $update['client_id']);
+            $upd_stmt->execute();
+            $upd_stmt->close();
+            break;
+        case 'row_color':
+            $upd_stmt = $conn->prepare("UPDATE Onboarding SET RowColor = ? WHERE ClientID = ?");
+            $upd_stmt->bind_param('ss', $update['color'], $update['client_id']);
+            $upd_stmt->execute();
+            $upd_stmt->close();
+            log_message("Updated RowColor for ClientID " . $update['client_id'] . " to " . $update['color']);
+            break;
+    }
+}
+$conn->close();
+?>
 </body>
 </html>
-
-<?php $conn->close(); ?>

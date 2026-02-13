@@ -8,12 +8,19 @@ if (!isset($_SESSION['userid'])) {
     exit;
 }
 
-$client_id = $_GET['client_id'];
+$client_id = $_GET['client_id'] ?? null;
+if ($client_id === null) {
+    echo "Client ID not provided.";
+    exit;
+}
 
-// Fetch client details
-$client_sql = "SELECT * FROM Onboarding WHERE ClientID = '$client_id'";
-$client_result = $conn->query($client_sql);
+// Fetch client details using prepared statement
+$stmt = $conn->prepare("SELECT * FROM Onboarding WHERE ClientID = ?");
+$stmt->bind_param("s", $client_id);
+$stmt->execute();
+$client_result = $stmt->get_result();
 $client = $client_result->fetch_assoc();
+$stmt->close();
 
 if (!$client) {
     echo "Client not found.";
@@ -27,7 +34,6 @@ if (!$client) {
 <head>
     <meta charset="UTF-8">
     <title>Onboarding Details</title>
-    <link rel="stylesheet" type="text/css" href="../style.css">
     <link rel="stylesheet" type="text/css" href="styles.css">
     <style>
         .tooltip {

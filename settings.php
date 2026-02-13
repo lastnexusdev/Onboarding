@@ -2,6 +2,7 @@
 session_start();
 require_once "auth_check.php";
 require_once "db.php";
+require_once "csrf_helper.php";
 
 $currentPage = 'settings';
 
@@ -46,8 +47,13 @@ if ($packages_result) {
     }
 }
 
+// CSRF validation for all POST requests
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && !validate_csrf_token()) {
+    $error_message = "Invalid request. Please try again.";
+}
+
 // Handle New Software Release Update
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_software_release'])) {
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_software_release']) && empty($error_message)) {
     $new_software_release = isset($_POST['new_software_release']) ? intval($_POST['new_software_release']) : 0;
 
     // Check if the setting exists
@@ -130,7 +136,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_software_releas
 }
 
 // Handle Add Custom Package
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_package'])) {
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_package']) && empty($error_message)) {
     $package_name = trim($_POST['package_name']);
     $package_description = trim($_POST['package_description']);
     $selected_programs = $_POST['package_programs'] ?? [];
@@ -159,7 +165,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_package'])) {
 }
 
 // Handle Delete Custom Package
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_package'])) {
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_package']) && empty($error_message)) {
     $package_id = intval($_POST['package_id']);
     
     $delete_sql = "DELETE FROM CustomPackages WHERE PackageID = ?";
@@ -178,18 +184,23 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_package'])) {
 }
 
 // Handle Add New Program
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_program'])) {
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_program']) && empty($error_message)) {
     $program_name = trim($_POST['program_name']);
-    $program_key = 'prog_' . str_replace(' ', '', $program_name);
-    
-    if (!empty($program_name)) {
-        // Check if column already exists
-        $check_column_sql = "SHOW COLUMNS FROM EntitledPrograms LIKE '$program_key'";
-        $check_result = $conn->query($check_column_sql);
-        
+    // Sanitize program key: only allow alphanumeric and underscores
+    $program_key = 'prog_' . preg_replace('/[^a-zA-Z0-9_]/', '', str_replace(' ', '', $program_name));
+
+    if (!empty($program_name) && preg_match('/^prog_[a-zA-Z0-9_]+$/', $program_key)) {
+        // Check if column already exists using prepared statement
+        $check_column_sql = "SHOW COLUMNS FROM EntitledPrograms LIKE ?";
+        $check_stmt = $conn->prepare($check_column_sql);
+        $check_stmt->bind_param('s', $program_key);
+        $check_stmt->execute();
+        $check_result = $check_stmt->get_result();
+        $check_stmt->close();
+
         if ($check_result->num_rows == 0) {
-            // Add new column to EntitledPrograms
-            $alter_sql = "ALTER TABLE EntitledPrograms ADD COLUMN $program_key TINYINT(1) NOT NULL DEFAULT 0";
+            // Add new column - program_key is sanitized to only contain [a-zA-Z0-9_]
+            $alter_sql = "ALTER TABLE EntitledPrograms ADD COLUMN `$program_key` TINYINT(1) NOT NULL DEFAULT 0";
             
             if ($conn->query($alter_sql)) {
                 $success_message = "Program '{$program_name}' added successfully!";
@@ -207,7 +218,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_program'])) {
 }
 
 // Handle System Settings Update
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_system_settings'])) {
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_system_settings']) && empty($error_message)) {
     $default_ready_to_call = isset($_POST['default_ready_to_call']) ? 1 : 0;
     $auto_assign_techs = isset($_POST['auto_assign_techs']) ? 1 : 0;
     $require_bank_enrollment = isset($_POST['require_bank_enrollment']) ? 1 : 0;
@@ -274,7 +285,6 @@ $conn->close();
 <head>
     <meta charset="UTF-8">
     <title>System Settings</title>
-    <link rel="stylesheet" type="text/css" href="../style.css">
     <link rel="stylesheet" type="text/css" href="styles.css">
     <style>
         body {
@@ -645,6 +655,7 @@ $conn->close();
                 </div>
 
                 <form method="POST" action="">
+                    <?php echo csrf_token_field(); ?>
                     <div class="toggle-switch">
                         <div>
                             <label for="new_software_release">New Software Release</label>
@@ -667,6 +678,7 @@ $conn->close();
                 <h3><span class="icon">??</span> System Preferences</h3>
 
                 <form method="POST" action="">
+                    <?php echo csrf_token_field(); ?>
                     <div class="toggle-switch">
                         <div>
                             <label for="default_ready_to_call">Default Ready to Call</label>
@@ -718,6 +730,7 @@ $conn->close();
                 </div>
 
                 <form method="POST" action="">
+                    <?php echo csrf_token_field(); ?>
                     <div class="form-group">
                         <label for="program_name">Program Name</label>
                         <input type="text" id="program_name" name="program_name" placeholder="e.g., 1120 or Payroll Manager" required>
@@ -748,6 +761,7 @@ $conn->close();
                 </div>
 
                 <form method="POST" action="">
+                    <?php echo csrf_token_field(); ?>
                     <div class="form-group">
                         <label for="package_name">Package Name</label>
                         <input type="text" id="package_name" name="package_name" placeholder="e.g., Premium Tax Package" required>
@@ -802,6 +816,7 @@ $conn->close();
                             </div>
 
                             <form method="POST" action="" style="display: inline;" onsubmit="return confirmDelete('<?php echo htmlspecialchars($package['PackageName']); ?>');">
+                                <?php echo csrf_token_field(); ?>
                                 <input type="hidden" name="package_id" value="<?php echo $package['PackageID']; ?>"><button type="submit" name="delete_package" class="btn-danger">
                                     ??? Delete Package
                                 </button>

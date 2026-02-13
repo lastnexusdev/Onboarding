@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once "db.php"; // your DB connection
+require_once "csrf_helper.php";
 
 // Already logged in? redirect
 if (isset($_SESSION['user_id'])) {
@@ -12,7 +13,7 @@ $error = "";
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $username = trim($_POST['username'] ?? "");
-    $password = trim($_POST['password'] ?? "");
+    $password = $_POST['password'] ?? "";
 
     if ($username !== "" && $password !== "") {
         $stmt = $conn->prepare("SELECT UserID, Username, Password, Role, Department FROM Users WHERE Username = ?");
@@ -25,6 +26,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             $stmt->fetch();
 
             if (password_verify($password, $db_password)) {
+                // Regenerate session ID to prevent session fixation
+                session_regenerate_id(true);
+
                 // Session variables
                 $_SESSION['user_id']    = $user_id;
                 $_SESSION['userid']     = $user_id;  // legacy name for existing code
@@ -42,10 +46,10 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 }
                 exit;
             } else {
-                $error = "Invalid password.";
+                $error = "Invalid username or password.";
             }
         } else {
-            $error = "Invalid username.";
+            $error = "Invalid username or password.";
         }
         $stmt->close();
     } else {
@@ -337,6 +341,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 <?php endif; ?>
 
                 <form method="POST" action="" id="loginForm">
+                    <?php echo csrf_token_field(); ?>
                     <div class="form-group">
                         <label for="username">Username</label>
                         <input 
